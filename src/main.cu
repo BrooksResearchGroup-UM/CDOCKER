@@ -160,11 +160,11 @@ int main(int argc, char** argv)
   {
     memcpy(&usedGridValues[i*xdim*ydim*zdim],
   	   &gridValues[idxOfVdwUsed[i]*xdim*ydim*zdim],
-  	   xdim*ydim*zdim);
+  	   sizeof(float)*xdim*ydim*zdim);
   }
   memcpy(&usedGridValues[numOfVdwGridsUsed*xdim*ydim*zdim],
   	 &gridValues[numOfVdwGrids*xdim*ydim*zdim],
-  	 xdim*ydim*zdim);
+  	 sizeof(float)*xdim*ydim*zdim);
 
   // batch cudaFFT for potential grids
   int n[3];

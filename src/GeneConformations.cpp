@@ -15,7 +15,7 @@
 int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coorsConformers)
 {
   ////  generate random conformers  
-  int N = 600;  // num of random conformers from which centers are selected
+  int N = 2000;  // num of random conformers from which centers are selected
   OpenBabel::OBMol mols[N];
   for(int i = 0; i < N; i++)
   {

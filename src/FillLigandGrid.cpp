@@ -23,22 +23,15 @@ void FillLigandGrid(int nQuaternions,
 	double y = coors[(i*nAtoms + m)*3 + 1];
 	double z = coors[(i*nAtoms + m)*3 + 2];
 	// index of grids this atom sits
-	double xRatio = (x - mincoors[i*3 + 0])/spacing;
-	double yRatio = (x - mincoors[i*3 + 1])/spacing;
-	double zRatio = (x - mincoors[i*3 + 2])/spacing;
-	
-	int xIndex = int(xRatio);
-	int yIndex = int(yRatio);
-	int zIndex = int(zRatio);
+	int xIndex = int((x - mincoors[i*3 + 0])/spacing);
+	int yIndex = int((y - mincoors[i*3 + 1])/spacing);
+	int zIndex = int((z - mincoors[i*3 + 2])/spacing);
 	
 	// trilinear interpolation
-	xRatio = xRatio - xIndex;
-	yRatio = yRatio - yIndex;
-	zRatio = zRatio - zIndex;
-	// double xRatio = ((x - mincoors[i*3 + 0]) - xIndex * spacing)/spacing;
-	// double yRatio = ((y - mincoors[i*3 + 1]) - yIndex * spacing)/spacing;
-	// double zRatio = ((z - mincoors[i*3 + 2]) - zIndex * spacing)/spacing;
-
+	double xRatio = ((x - mincoors[i*3 + 0]) - xIndex * spacing)/spacing;
+	double yRatio = ((y - mincoors[i*3 + 1]) - yIndex * spacing)/spacing;
+	double zRatio = ((z - mincoors[i*3 + 2]) - zIndex * spacing)/spacing;
+	
 	// index of ligandGridValue
 	int idxGrid = i * (numOfVdwGridsUsed + 1) + j;
 	int idxValue = idxGrid * xdim * ydim * zdim;
@@ -79,27 +72,14 @@ void FillLigandGrid(int nQuaternions,
       double y = coors[(i*nAtoms + m)*3 + 1];
       double z = coors[(i*nAtoms + m)*3 + 2];
       // index of grids this atom sits
-      double xRatio = (x - mincoors[i*3 + 0])/spacing;
-      double yRatio = (x - mincoors[i*3 + 1])/spacing;
-      double zRatio = (x - mincoors[i*3 + 2])/spacing;
-	
-      int xIndex = int(xRatio);
-      int yIndex = int(yRatio);
-      int zIndex = int(zRatio);
+      int xIndex = int((x - mincoors[i*3 + 0])/spacing);
+      int yIndex = int((y - mincoors[i*3 + 1])/spacing);
+      int zIndex = int((z - mincoors[i*3 + 2])/spacing);
 	
       // trilinear interpolation
-      xRatio = xRatio - xIndex;
-      yRatio = yRatio - yIndex;
-      zRatio = zRatio - zIndex;
-
-      // int xIndex = int((x - mincoors[i*3 + 0])/spacing);
-      // int yIndex = int((y - mincoors[i*3 + 1])/spacing);
-      // int zIndex = int((z - mincoors[i*3 + 2])/spacing);
-	
-      // // trilinear interpolation
-      // double xRatio = ((x - mincoors[i*3 + 0]) - xIndex * spacing)/spacing;
-      // double yRatio = ((y - mincoors[i*3 + 1]) - yIndex * spacing)/spacing;
-      // double zRatio = ((z - mincoors[i*3 + 2]) - zIndex * spacing)/spacing;
+      double xRatio = ((x - mincoors[i*3 + 0]) - xIndex * spacing)/spacing;
+      double yRatio = ((y - mincoors[i*3 + 1]) - yIndex * spacing)/spacing;
+      double zRatio = ((z - mincoors[i*3 + 2]) - zIndex * spacing)/spacing;
 
       int idxGrid = i * (numOfVdwGridsUsed + 1) + numOfVdwGridsUsed;
       int idxValue = idxGrid * xdim * ydim * zdim;
