@@ -14,5 +14,8 @@ void GetMinCoors(int nQuaternions, int nAtoms, float *coors, float* mincoors)
       if (coors[(i*nAtoms+k)*3 + 1] < mincoors[i*3 + 1]) { mincoors[i*3 + 1] = coors[(i*nAtoms+k)*3 + 1]; }
       if (coors[(i*nAtoms+k)*3 + 2] < mincoors[i*3 + 2]) { mincoors[i*3 + 2] = coors[(i*nAtoms+k)*3 + 2]; }
     }
+    mincoors[i*3 + 0] -= 0.00001;
+    mincoors[i*3 + 1] -= 0.00001;
+    mincoors[i*3 + 2] -= 0.00001;
   }
 }
