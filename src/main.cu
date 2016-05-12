@@ -171,19 +171,6 @@ int main(int argc, char** argv)
   int numOfConformations;
   numOfConformations = GeneConformations(mol, sys, coorsConformations);
 
-
-
-  // read coordinate file
-
-  float* coor;
-  coor = new float[nAtom*3];
-  for(int i = 0; i < nAtom; i++)
-  {
-    coor[i*3 + 0] = (float) coorsConformations[i*3+0];
-    coor[i*3 + 1] = (float) coorsConformations[i*3+1];
-    coor[i*3 + 2] = (float) coorsConformations[i*3+2];
-  }
-
   // loop over all batches for different orientation
   int numOfQuaternionsOneBatch = 30;
   int numOfBatches = numOfTotalQuaternions / numOfQuaternionsOneBatch + 1;
@@ -229,69 +216,83 @@ int main(int argc, char** argv)
     std::cout << "plan creat failed!";
     return 1;
   }
-
   float* energy;
   energy = new float[numOfQuaternionsOneBatch*idist];
 
-  for(int idxOfBatch = 0; idxOfBatch < numOfBatches; idxOfBatch++)
+  // read coordinate file
+  float* coor;
+  coor = new float[nAtom*3];
+
+  for (int idxOfConformer = 0; idxOfConformer < numOfConformations; idxOfConformer++)
   {
-    std::cout << "idxOfBatch: " << idxOfBatch << std::endl; 
-    // rotate  
-    for(int i = 0; i < numOfQuaternionsOneBatch; i++)
+    std::cout << "idxOfConformer: " << idxOfConformer << std::endl;
+    for(int i = 0; i < nAtom; i++)
     {
-      if (idxOfBatch*numOfQuaternionsOneBatch + i < numOfTotalQuaternions)
+      coor[i*3 + 0] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 0];
+      coor[i*3 + 1] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 1];
+      coor[i*3 + 2] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 2];
+    }
+
+    for(int idxOfBatch = 0; idxOfBatch < numOfBatches; idxOfBatch++)
+    {
+      std::cout << "idxOfBatch: " << idxOfBatch << std::endl; 
+      // rotate  
+      for(int i = 0; i < numOfQuaternionsOneBatch; i++)
       {
-	for(int j = 0; j < nAtom; j++)
+	if (idxOfBatch*numOfQuaternionsOneBatch + i < numOfTotalQuaternions)
 	{
-	  Rotate(&quaternioins[(idxOfBatch*numOfQuaternionsOneBatch + i)*4], &coor[j*3], &coors[i*nAtom*3+j*3]);
+	  for(int j = 0; j < nAtom; j++)
+	  {
+	    Rotate(&quaternioins[(idxOfBatch*numOfQuaternionsOneBatch + i)*4], &coor[j*3], &coors[i*nAtom*3+j*3]);
+	  }
 	}
       }
-    }
     
-    // calculate minimum coor for each quaternions
-    GetMinCoors(numOfQuaternionsOneBatch, nAtom, coors, mincoors);
+      // calculate minimum coor for each quaternions
+      GetMinCoors(numOfQuaternionsOneBatch, nAtom, coors, mincoors);
 
-    // fill ligand grid
-    memset(ligandGridValues, 0, sizeof(float)*numOfQuaternionsOneBatch*numOfGridsUsed*xdim*ydim*zdim);
-    FillLigandGrid(numOfQuaternionsOneBatch,
-		   nAtom, coors, mincoors,
-		   atomCharges, atomEpsilons,
-		   numOfVdwGridsUsed, idxOfVdwUsed,
-		   idxOfAtomVdwRadius,
-		   xdim, ydim, zdim,
-		   spacing, ligandGridValues);
+      // fill ligand grid
+      memset(ligandGridValues, 0, sizeof(float)*numOfQuaternionsOneBatch*numOfGridsUsed*xdim*ydim*zdim);
+      FillLigandGrid(numOfQuaternionsOneBatch,
+		     nAtom, coors, mincoors,
+		     atomCharges, atomEpsilons,
+		     numOfVdwGridsUsed, idxOfVdwUsed,
+		     idxOfAtomVdwRadius,
+		     xdim, ydim, zdim,
+		     spacing, ligandGridValues);
 
 
-    // batch cudaFFT for ligand grid
-    cudaMemcpy(d_ligand_f, ligandGridValues,
-	       sizeof(cufftReal)*nBatchLigand*idist,
-	       cudaMemcpyHostToDevice);
-    ligandRes = cufftExecR2C(ligandPlan, d_ligand_f, d_ligand_F);
-    if (ligandRes != CUFFT_SUCCESS)
-    {
-      std::cout << "transform failed!";
-      return 1;
+      // batch cudaFFT for ligand grid
+      cudaMemcpy(d_ligand_f, ligandGridValues,
+		 sizeof(cufftReal)*nBatchLigand*idist,
+		 cudaMemcpyHostToDevice);
+      ligandRes = cufftExecR2C(ligandPlan, d_ligand_f, d_ligand_F);
+      if (ligandRes != CUFFT_SUCCESS)
+      {
+	std::cout << "transform failed!";
+	return 1;
+      }
+
+      // calcualte energy using reverse FFT
+      ConjMult <<<blocks_ConjMult, threads_ConjMult>>> (d_potential_F, d_ligand_F, odist, numOfGridsUsed);
+      CUDA_CHECK();
+
+      SumGrids <<<blocks_SumGrids, threads_SumGrids>>> (d_ligand_F, d_ligand_sum_F, numOfGridsUsed, odist, idist);
+      CUDA_CHECK();
+
+      ligandRRes = cufftExecC2R(ligandRPlan, d_ligand_sum_F, d_ligand_sum_f);
+      if (ligandRRes != CUFFT_SUCCESS)
+      {
+	std::cout << "transform failed!";
+	return 1;
+      }
+
+      // copy energy back
+      cudaMemcpy(energy, d_ligand_sum_f, sizeof(float)*numOfQuaternionsOneBatch*idist,
+		 cudaMemcpyDeviceToHost);
+      std::cout << "Energy: " << energy[0]/sqrt(idist) << std::endl;
+      std::cout << "Energy: " << energy[1]/sqrt(idist) << std::endl;
     }
-
-    // calcualte energy using reverse FFT
-    ConjMult <<<blocks_ConjMult, threads_ConjMult>>> (d_potential_F, d_ligand_F, odist, numOfGridsUsed);
-    CUDA_CHECK();
-
-    SumGrids <<<blocks_SumGrids, threads_SumGrids>>> (d_ligand_F, d_ligand_sum_F, numOfGridsUsed, odist, idist);
-    CUDA_CHECK();
-
-    ligandRRes = cufftExecC2R(ligandRPlan, d_ligand_sum_F, d_ligand_sum_f);
-    if (ligandRRes != CUFFT_SUCCESS)
-    {
-      std::cout << "transform failed!";
-      return 1;
-    }
-
-    // copy energy back
-    cudaMemcpy(energy, d_ligand_sum_f, sizeof(float)*numOfQuaternionsOneBatch*idist,
-	       cudaMemcpyDeviceToHost);
-    std::cout << "Energy: " << energy[0]/sqrt(idist) << std::endl;
-    std::cout << "Energy: " << energy[1]/sqrt(idist) << std::endl;
-  }  
+  }
   return 0;
 }
