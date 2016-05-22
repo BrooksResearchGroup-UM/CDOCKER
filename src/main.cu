@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <string>
+#include <math.h>
 
 #include "OpenMM.h"
 #include <openbabel/obconversion.h>
@@ -172,7 +173,7 @@ int main(int argc, char** argv)
   numOfConformations = GeneConformations(mol, sys, coorsConformations);
 
   // loop over all batches for different orientation
-  int numOfQuaternionsOneBatch = 30;
+  int numOfQuaternionsOneBatch = 60;
   int numOfBatches = numOfTotalQuaternions / numOfQuaternionsOneBatch + 1;
     
   // allocate the data structures which will be used
@@ -223,8 +224,14 @@ int main(int argc, char** argv)
   float* coor;
   coor = new float[nAtom*3];
 
+  int minEnergyIdx = 0;
+  float minEnergy = INFINITY;
+
   for (int idxOfConformer = 0; idxOfConformer < numOfConformations; idxOfConformer++)
   {
+    minEnergyIdx = 0;
+    minEnergy = INFINITY;
+    
     std::cout << "idxOfConformer: " << idxOfConformer << std::endl;
     for(int i = 0; i < nAtom; i++)
     {
@@ -232,7 +239,6 @@ int main(int argc, char** argv)
       coor[i*3 + 1] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 1];
       coor[i*3 + 2] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 2];
     }
-
     for(int idxOfBatch = 0; idxOfBatch < numOfBatches; idxOfBatch++)
     {
       std::cout << "idxOfBatch: " << idxOfBatch << std::endl; 
@@ -290,9 +296,38 @@ int main(int argc, char** argv)
       // copy energy back
       cudaMemcpy(energy, d_ligand_sum_f, sizeof(float)*numOfQuaternionsOneBatch*idist,
 		 cudaMemcpyDeviceToHost);
-      std::cout << "Energy: " << energy[0]/sqrt(idist) << std::endl;
-      std::cout << "Energy: " << energy[1]/sqrt(idist) << std::endl;
+      /* std::cout << "Energy: " << energy[0]/sqrt(idist) << std::endl; */
+      /* std::cout << "Energy: " << energy[1]/sqrt(idist) << std::endl; */
+      
+      // get the index of minimum energy pose
+      for(int i = 0; i < numOfQuaternionsOneBatch*idist; i++)
+      {
+	if (idxOfBatch*numOfQuaternionsOneBatch*idist + i < numOfTotalQuaternions*idist)
+	{
+	  if (energy[i] / sqrt(idist) < minEnergy)
+	  {
+	    minEnergy = energy[i] / sqrt(idist);
+	    minEnergyIdx = idxOfBatch * numOfQuaternionsOneBatch * idist + i;
+	  }
+	}
+      }      
     }
+
+    int minEnergyQuaternionIdx = minEnergyIdx / idist;
+    int tmp = minEnergyIdx % idist;
+    int minEnergyZ = tmp % zdim;
+    int minEnergyY = (tmp - minEnergyZ) / zdim % ydim;
+    int minEnergyX =  tmp / (ydim * zdim);
+
+    std::cout << "IdxConformer: " << idxOfConformer << "," ;
+    std::cout << "minEnergyIdx: " << minEnergyIdx << "," ;
+    std::cout << "minEnergyQuaternionIdx: " << minEnergyQuaternionIdx << "," ;
+    std::cout << "minEnergyX: " << minEnergyX << "," ;
+    std::cout << "minEnergyY: " << minEnergyY << "," ;
+    std::cout << "minEnergyZ: " << minEnergyZ << "," ;
+    std::cout << "minEnergy: " << minEnergy << std::endl;
+
+    
   }
   return 0;
 }
