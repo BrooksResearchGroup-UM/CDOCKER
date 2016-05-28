@@ -21,6 +21,7 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coors
   {
     mols[i] = mol;
   }
+  std::cout << "copy mols done" << std::endl;
   
   OpenBabel::OBRotorList rotors; // rotatable bonds 
   bool ifHasRotors;
@@ -41,11 +42,18 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coors
 	double tmp = M_PI * (rand() / ((float) RAND_MAX) - 0.5) * 2;
 	(*rotorIter)->SetToAngle(mols[i].GetCoordinates(), tmp);
       }
-    }  
+    }
+    std::cout << "random  rotor done" << std::endl;
     // brief minimization and calculate energy for each conformation
     OpenMM::VerletIntegrator integrator(0.001);
     OpenMM::LocalEnergyMinimizer minimizer;
-    OpenMM::Context context(*sys, integrator);
+    // OpenMM::Platform::loadPluginLibrary("/home/xqding/apps/openmmDev/lib/plugins/libOpenMMCPU.so");
+    OpenMM::Platform& platform = OpenMM::Platform::getPlatformByName("CPU");
+    OpenMM::Context context(*sys, integrator, platform);
+    // OpenMM::Context context(*sys, integrator);
+    printf( "REMARK  GeneConformation Using OpenMM platform %s\n",
+	    context.getPlatform().getName().c_str() );
+
     OpenMM::State state;
     std::vector<OpenMM::Vec3> position(sys->getNumParticles());
     OpenBabel::OBAlign align(mol, mols[0]);

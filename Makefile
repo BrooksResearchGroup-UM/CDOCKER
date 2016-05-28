@@ -6,13 +6,13 @@ LIB_DIR=-L$(OpenMM_INSTALL_DIR)/lib -L$(CUFFTDIR)/lib -L$(CUFFTDIR)/lib64 -L$(HO
 INCLUDE_DIR=-I$(OpenMM_INSTALL_DIR)/include -I$(CUFFTDIR)/include -I./include -I$(HOME)/local/include/openbabel-2.0 -I$(HOME)/apps/Eigen2
 LIBS= -lOpenMM -lopenbabel -lcufft -lm
 CFLAGS=-g 
-CC = nvcc -std=c++11
+CC = nvcc -std=c++11 -arch=sm_20
 
 BUILD = ./build
 SOURCE = ./src
 
 programs = $(BUILD)/main $(BUILD)/cpuNaive
-objects = $(BUILD)/ReadCrd.o $(BUILD)/ReadGrids.o $(BUILD)/ReadQuaternions.o $(BUILD)/Rotate.o $(BUILD)/QuaternionMultiply.o $(BUILD)/FillLigandGrid.o $(BUILD)/GetMinCoors.o $(BUILD)/GetNonbondedParameters.o $(BUILD)/GetIdxOfAtomsForVdwRadius.o $(BUILD)/GeneConformations.o $(BUILD)/GetMaxCoors.o
+objects = $(BUILD)/ReadCrd.o $(BUILD)/ReadGrids.o $(BUILD)/ReadQuaternions.o $(BUILD)/Rotate.o $(BUILD)/QuaternionMultiply.o $(BUILD)/FillLigandGrid.o $(BUILD)/GetMinCoors.o $(BUILD)/GetNonbondedParameters.o $(BUILD)/GetIdxOfAtomsForVdwRadius.o $(BUILD)/GeneConformations.o $(BUILD)/GetMaxCoors.o $(BUILD)/kernel.o
 
 
 all: $(programs) copy
