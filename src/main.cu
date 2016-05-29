@@ -35,8 +35,8 @@ int main(int argc, char** argv)
 {
   OpenMM::Platform::loadPluginsFromDirectory(
   					     "/home/xqding/apps/openmmDev/lib/plugins");
-  // OpenMM::Platform::loadPluginLibrary("/home/xqding/apps/openmmDev/lib/plugins/libOpenMMCUDA.so");
-  // read in molecule
+  
+  // read molecule
   std::string fileName(argv[1]);
   OpenBabel::OBMol mol;
   OpenBabel::OBConversion conv(&std::cin, &std::cout);
@@ -58,14 +58,9 @@ int main(int argc, char** argv)
   // random clustered conformations
   double *coorsConformations;
   int numOfConformations;
-  std::cout << "Start GeneConforamtions" << std::endl;
-  time_t start, end;
-  time(&start);
   numOfConformations = GeneConformations(mol, sys, coorsConformations);
-  time(&end);
-  std::cout << "End GeneConforamtions" << std::endl;
-  std::cout << "Time used GeneConformations: " << difftime(end, start) << std::endl;
-
+  std::cout << "numOfConformations: " << numOfConformations << std::endl;
+  
   // get nonbonded parameters
   float atomCharges[nAtom];
   float atomEpsilons[nAtom];
@@ -85,9 +80,8 @@ int main(int argc, char** argv)
   	    gridRadii, gridValues,
   	    argv[3]);
   int numOfVdwGrids = numOfGrids - 1;
-  std::cout << "Reading grid done" << std::endl;
   
-  // // add electrostatic grid force
+  // add electrostatic grid force
   double xmin = midx - xlen / 2;
   double ymin = midy - ylen / 2;
   double zmin = midz - zlen / 2;
@@ -95,9 +89,6 @@ int main(int argc, char** argv)
   double ymax = ymin + (ydim - 1) * spacing;
   double zmax = zmin + (zdim - 1) * spacing;
 
-
-  std::cout << "Begin add custom force" << std::endl;
-  time(&start);
   std::vector <double> tmpGridValue(xdim*ydim*zdim, 0);
   for(int i = 0; i < xdim*ydim*zdim; i++)
   {
@@ -214,10 +205,6 @@ int main(int argc, char** argv)
 
   state = context.getState(OpenMM::State::Energy);
   std::cout << "Potential Energy: " << state.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
-  
-  time(&end);
-  std::cout << "End addining custom force" << std::endl;
-  std::cout << "Time Used: " << difftime(end, start) << std::endl;
 
   //// do translation and rotation search using FFT
   // batch cudaFFT for potential grids
@@ -269,10 +256,9 @@ int main(int argc, char** argv)
   float *quaternioins;
   quaternioins = new float[numOfTotalQuaternions * 4];
   ReadQuaternions(numOfTotalQuaternions, quaternioins, argv[5]);
-
   
   // loop over all batches for different orientation
-  int numOfQuaternionsOneBatch = 150;
+  int numOfQuaternionsOneBatch = 100;
   int numOfBatches = numOfTotalQuaternions / numOfQuaternionsOneBatch + 1;
     
   // allocate the data structures which will be used
@@ -284,6 +270,7 @@ int main(int argc, char** argv)
   
   float *ligandGridValues; // grid for ligand
   ligandGridValues = new float[numOfQuaternionsOneBatch*numOfGridsUsed*xdim*ydim*zdim];
+  
   // cudaFFT for ligand grid
   int nBatchLigand = numOfQuaternionsOneBatch*numOfGridsUsed;
   cufftReal* d_ligand_f;
@@ -302,11 +289,14 @@ int main(int argc, char** argv)
   }
 
   dim3 threads_ConjMult(1024, 1, 1);
-  dim3 blocks_ConjMult((numOfQuaternionsOneBatch*numOfGridsUsed*odist)/(1024*1025) + 1,1024,1);
+  dim3 blocks_ConjMult((numOfQuaternionsOneBatch*numOfGridsUsed*odist)/(1024*1024) + 1,1024,1);
+ 
   cufftComplex * d_ligand_sum_F;
   cudaMalloc((void **)&d_ligand_sum_F, sizeof(cufftComplex)*numOfQuaternionsOneBatch*odist);
+  
   dim3 threads_SumGrids(1024, 1, 1);
   dim3 blocks_SumGrids((numOfQuaternionsOneBatch*odist)/(1024*1024),1024,1);
+  
   cufftReal *d_ligand_sum_f;
   cudaMalloc((void **)&d_ligand_sum_f, sizeof(cufftReal)*numOfQuaternionsOneBatch*idist);
   cufftHandle ligandRPlan;
@@ -327,18 +317,18 @@ int main(int argc, char** argv)
   coor = new float[nAtom*3];
 
   int minEnergyQ = 0;
-  int minEnergyX = 0;
-  int minEnergyY = 0;
-  int minEnergyZ = 0;
+  int minEnergyIdxX = 0;
+  int minEnergyIdxY = 0;
+  int minEnergyIdxZ = 0;
   float minEnergy = INFINITY;
 
   std::cout << "numOfConformations: " << numOfConformations << std::endl;
   for (int idxOfConformer = 0; idxOfConformer < numOfConformations; idxOfConformer++)
   {
     minEnergyQ = 0;
-    minEnergyX = 0;
-    minEnergyY = 0;
-    minEnergyZ = 0;
+    minEnergyIdxX = 0;
+    minEnergyIdxY = 0;
+    minEnergyIdxZ = 0;
     minEnergy = INFINITY;
     
     std::cout << "idxOfConformer: " << idxOfConformer << std::endl;
@@ -417,55 +407,76 @@ int main(int argc, char** argv)
       cudaMemcpy(energy, d_ligand_sum_f, sizeof(float)*numOfQuaternionsOneBatch*idist,
   		 cudaMemcpyDeviceToHost);
 
-      // get the index of minimum energy pose
+      // record the minimum energy pose in terms of quaternions, x, y and z
       for(int q = 0; q < numOfQuaternionsOneBatch; q++)
       {
-      	for(int i = 0; i < (xdim - int(ligandLength[q*3+0] / spacing) - 2); i++)
-      	{
-      	  for(int j = 0; j < (ydim - int(ligandLength[q*3+1] / spacing) - 2); j++ )
-      	  {
-      	    for(int k = 0; k < (zdim - int(ligandLength[q*3+2] / spacing) - 2); k++)
-      	    {
-      	      int tmp = q*idist + (i*ydim + j)*zdim+k;
-      	      if(idxOfBatch*numOfQuaternionsOneBatch*idist + tmp < numOfTotalQuaternions*idist)
-      	      {
-      		if (energy[tmp] / sqrt(idist) < minEnergy)
-      		{
-      		  minEnergy = energy[tmp] / sqrt(idist);
-      		  minEnergyQ = q;
-      		  minEnergyX = i;
-      		  minEnergyY = j;
-      		  minEnergyZ = k;
-      		}
-      	      }
-      	    }
-      	  }
-      	}
+	for(int i = 0; i < (xdim-int(ligandLength[q*3+0]/spacing)-2); i++)
+	{
+	  for(int j = 0; j < (ydim-int(ligandLength[q*3+1]/spacing)-2); j++)
+	  {
+	    for(int k = 0; k < (ydim-int(ligandLength[q*3+2]/spacing)-2); k++)
+	    {
+	      if(idxOfBatch*numOfQuaternionsOneBatch + q < numOfTotalQuaternions)
+	      {
+		int tmp = q*idist + (i*ydim + j)*zdim + k;
+		if(energy[tmp] / sqrt(idist) < minEnergy)
+		{
+		  minEnergy = energy[tmp] / sqrt(idist);
+		  minEnergyQ = idxOfBatch * numOfQuaternionsOneBatch + q;
+		  minEnergyIdxX = i;
+		  minEnergyIdxY = j;
+		  minEnergyIdxZ = k;
+		}
+	      }
+	    }
+	  }
+	}
       }
     }
 
-    // translation the coordinates for the minEnergyQuaternionIdx
-    double dcoors[nAtom*3];
+    // calculate the coordinates corresponding to minimum energy
+    float minEnergyCoor[nAtom*3];
     for(int i = 0; i < nAtom; i++)
     {
-      coors[minEnergyQ*nAtom*3 + i*3 + 0] += xmin - mincoors[minEnergyQ*3 + 0] + minEnergyX * spacing;
-      coors[minEnergyQ*nAtom*3 + i*3 + 1] += xmin - mincoors[minEnergyQ*3 + 1] + minEnergyY * spacing;
-      coors[minEnergyQ*nAtom*3 + i*3 + 2] += xmin - mincoors[minEnergyQ*3 + 2] + minEnergyZ * spacing;
-      dcoors[i*3 + 0] = coors[minEnergyQ*nAtom*3 + i*3 + 0];
-      dcoors[i*3 + 1] = coors[minEnergyQ*nAtom*3 + i*3 + 1];
-      dcoors[i*3 + 2] = coors[minEnergyQ*nAtom*3 + i*3 + 2];
+      Rotate(&quaternioins[minEnergyQ*4], &coor[i*3], &minEnergyCoor[i*3]);
     }
-    mol.SetCoordinates(dcoors);
+    
+    float minEnergyMinX = minEnergyCoor[0];
+    float minEnergyMinY = minEnergyCoor[1];
+    float minEnergyMinZ = minEnergyCoor[2];
+    for(int i = 1; i < nAtom; i++)
+    {
+      if (minEnergyCoor[i*3+0] < minEnergyMinX) { minEnergyMinX = minEnergyCoor[i*3+0]; }
+      if (minEnergyCoor[i*3+1] < minEnergyMinY) { minEnergyMinY = minEnergyCoor[i*3+1]; }
+      if (minEnergyCoor[i*3+2] < minEnergyMinZ) { minEnergyMinZ = minEnergyCoor[i*3+2]; }
+    }
+    
+    double minEnergyCoorDouble[nAtom*3];
+    for(int i = 0; i < nAtom; i++)
+    {
+      minEnergyCoorDouble[i*3 + 0] = (double) minEnergyCoor[i*3 + 0];
+      minEnergyCoorDouble[i*3 + 1] = (double) minEnergyCoor[i*3 + 1];
+      minEnergyCoorDouble[i*3 + 2] = (double) minEnergyCoor[i*3 + 2];
+    }
+
+    for(int i = 0; i < nAtom; i++)
+    {
+      minEnergyCoorDouble[i*3 + 0] += xmin - minEnergyMinX + minEnergyIdxX * spacing;
+      minEnergyCoorDouble[i*3 + 1] += ymin - minEnergyMinY + minEnergyIdxY * spacing;
+      minEnergyCoorDouble[i*3 + 2] += zmin - minEnergyMinZ + minEnergyIdxZ * spacing;
+    }
+
+    mol.SetCoordinates(minEnergyCoorDouble);
     fileName = "conformer_";
     fileName += std::to_string(idxOfConformer);
     fileName += ".pdb";
     conv.WriteFile(&mol, fileName);
-    std::cout << "IdxConformer: " << idxOfConformer << "," ;
-    std::cout << "minEnergyQuaternionIdx: " << minEnergyQ << "," ;
-    std::cout << "minEnergyX: " << minEnergyX << "," ;
-    std::cout << "minEnergyY: " << minEnergyY << "," ;
-    std::cout << "minEnergyZ: " << minEnergyZ << "," ;
-    std::cout << "minEnergy: " << minEnergy << std::endl;
+
+    std::cout << "Conformer: " << idxOfConformer << ", IdxQ: " << minEnergyQ 
+	      << ", IdxX: " << minEnergyIdxX
+	      << ", IdxY: " << minEnergyIdxY << ", IdxZ: " << minEnergyIdxZ
+	      << ", MinEnergy:" << minEnergy << std::endl;
+
   }
   return 0;
 }
