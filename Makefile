@@ -11,7 +11,7 @@ CC = nvcc -std=c++11 -arch=sm_20
 BUILD = ./build
 SOURCE = ./src
 
-programs = $(BUILD)/main $(BUILD)/cpuNaive
+programs = $(BUILD)/main $(BUILD)/cpuNaive $(BUILD)/TranRotaSearch
 objects = $(BUILD)/ReadCrd.o $(BUILD)/ReadGrids.o $(BUILD)/ReadQuaternions.o $(BUILD)/Rotate.o $(BUILD)/QuaternionMultiply.o $(BUILD)/FillLigandGrid.o $(BUILD)/GetMinCoors.o $(BUILD)/GetNonbondedParameters.o $(BUILD)/GetIdxOfAtomsForVdwRadius.o $(BUILD)/GeneConformations.o $(BUILD)/GetMaxCoors.o $(BUILD)/kernel.o
 
 
