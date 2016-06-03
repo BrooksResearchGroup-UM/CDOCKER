@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include <cmath>
 #include "GetIdxOfAtomsForVdwRadius.h"
 
 void GetIdxOfAtomsForVdwRadius(int nAtoms, float* atomRadii,
@@ -10,13 +10,13 @@ void GetIdxOfAtomsForVdwRadius(int nAtoms, float* atomRadii,
   for(int i = 0; i < nAtoms; i++)
   {
     int idx = 0;
-    double diff = abs(atomRadii[i] - gridRadii[idx]);
+    double diff = std::abs(atomRadii[i] - gridRadii[idx]);
     for (int j = 1; j < numOfVdwGrids; j++)
     {
-      if (abs(atomRadii[i] - gridRadii[j]) < diff)
+      if (std::abs(atomRadii[i] - gridRadii[j]) < diff)
       {
 	idx = j;
-	diff = abs(atomRadii[i] - gridRadii[j]);
+	diff = std::abs(atomRadii[i] - gridRadii[j]);
       }
     }
     idxOfAtomVdwRadius[idx].push_back(i);
