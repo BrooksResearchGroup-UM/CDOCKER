@@ -412,7 +412,6 @@ int main(int argc, char** argv)
 	      if((energy[tmp]/sqrt(idist)) < minEnergy)
 	      {
 		minEnergy = energy[tmp] / sqrt(idist);
-		std::cout << "minEnergy: " << minEnergy << std::endl;
 		minEnergyQ = idxOfBatch * numOfQuaternionsOneBatch + q;
 		minEnergyIdxX = i;
 		minEnergyIdxY = j;
@@ -442,13 +441,13 @@ int main(int argc, char** argv)
     if (minEnergyCoor[i*3+2] < minEnergyMinZ) { minEnergyMinZ = minEnergyCoor[i*3+2]; }
   }
 
-  std::cout << "minEnergyMinX: " << minEnergyMinX << std::endl;
-  std::cout << "minEnergyMinY: " << minEnergyMinY << std::endl;
-  std::cout << "minEnergyMinZ: " << minEnergyMinZ << std::endl;
+  // std::cout << "minEnergyMinX: " << minEnergyMinX << std::endl;
+  // std::cout << "minEnergyMinY: " << minEnergyMinY << std::endl;
+  // std::cout << "minEnergyMinZ: " << minEnergyMinZ << std::endl;
   
-  std::cout << "xmin: " << xmin << std::endl;
-  std::cout << "ymin: " << ymin << std::endl;
-  std::cout << "zmin: " << zmin << std::endl;
+  // std::cout << "xmin: " << xmin << std::endl;
+  // std::cout << "ymin: " << ymin << std::endl;
+  // std::cout << "zmin: " << zmin << std::endl;
   
   double minEnergyCoorDouble[nAtom*3];
   for(int i = 0; i < nAtom; i++)
@@ -470,11 +469,6 @@ int main(int argc, char** argv)
   fileName += ".pdb";
   conv.WriteFile(&mol, fileName);
 
-  std::cout << "IdxQ: " << minEnergyQ 
-	    << ", IdxX: " << minEnergyIdxX
-	    << ", IdxY: " << minEnergyIdxY
-	    << ", IdxZ: " << minEnergyIdxZ
-	    << ", MinEnergy:" << minEnergy << std::endl;
-
+  std::cout << "MinEnergy: " << minEnergy << std::endl;
   return 0;
 }
