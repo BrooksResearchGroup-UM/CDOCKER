@@ -295,7 +295,7 @@ int main(int argc, char** argv)
   cudaMalloc((void **)&d_ligand_sum_F, sizeof(cufftComplex)*numOfQuaternionsOneBatch*odist);
   
   dim3 threads_SumGrids(1024, 1, 1);
-  dim3 blocks_SumGrids((numOfQuaternionsOneBatch*odist)/(1024*1024),1024,1);
+  dim3 blocks_SumGrids((numOfQuaternionsOneBatch*odist)/(1024*1024)+1,1024,1);
   
   cufftReal *d_ligand_sum_f;
   cudaMalloc((void **)&d_ligand_sum_f, sizeof(cufftReal)*numOfQuaternionsOneBatch*idist);
