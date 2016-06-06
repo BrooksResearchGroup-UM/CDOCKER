@@ -54,12 +54,6 @@ int main(int argc, char** argv)
   }
   OpenMM::System *sys = new OpenMM::System();
   sys = OpenMM::XmlSerializer::deserialize<OpenMM::System>(sysFile);
-
-  // // random clustered conformations
-  // double *coorsConformations;
-  // int numOfConformations;
-  // numOfConformations = GeneConformations(mol, sys, coorsConformations);
-  // std::cout << "numOfConformations: " << numOfConformations << std::endl;
   
   // get nonbonded parameters
   float atomCharges[nAtom];
@@ -89,38 +83,6 @@ int main(int argc, char** argv)
   double ymax = ymin + (ydim - 1) * spacing;
   double zmax = zmin + (zdim - 1) * spacing;
 
-  // std::vector <double> tmpGridValue(xdim*ydim*zdim, 0);
-  // for(int i = 0; i < xdim*ydim*zdim; i++)
-  // {
-  //   tmpGridValue[i] = gridValues[numOfVdwGrids*xdim*ydim*zdim + i] * OpenMM::KJPerKcal;
-  // }
-  // OpenMM::Continuous3DFunction *elecGridFunction =
-  //   new OpenMM::Continuous3DFunction(xdim, ydim, zdim,
-  // 				     tmpGridValue,
-  // 				     xmin*OpenMM::NmPerAngstrom,
-  // 				     xmax*OpenMM::NmPerAngstrom,
-  // 				     ymin*OpenMM::NmPerAngstrom,
-  // 				     ymax*OpenMM::NmPerAngstrom,
-  // 				     zmin*OpenMM::NmPerAngstrom,
-  // 				     zmax*OpenMM::NmPerAngstrom);
-  
-  // OpenMM::CustomCompoundBondForce *elecGridPotential =
-  //   new OpenMM::CustomCompoundBondForce(1, "elecGrid(x1,y1,z1) * q");
-  // elecGridPotential->setForceGroup(10);
-  // int idxElecGrid = sys->addForce(elecGridPotential);
-  // elecGridPotential->addTabulatedFunction("elecGrid", elecGridFunction);
-  // elecGridPotential->addPerBondParameter("q");
-  
-  // std::vector<int> idxParticle(1,0);
-  // std::vector<double> parameter(1,0);
-  
-  // for (int i = 0; i < sys->getNumParticles(); i++)
-  // {
-  //   idxParticle[0] = i;
-  //   parameter[0] = atomCharges[i];
-  //   elecGridPotential->addBond(idxParticle, parameter);
-  // }
-
   // get index of atoms for each vdw radius
   int numOfVdwGridsUsed;
   std::vector<int> idxOfVdwUsed;
@@ -143,68 +105,6 @@ int main(int argc, char** argv)
   memcpy(&usedGridValues[numOfVdwGridsUsed*xdim*ydim*zdim],
   	 &gridValues[numOfVdwGrids*xdim*ydim*zdim],
   	 sizeof(float)*xdim*ydim*zdim);
-
-  // // add vdw grid force
-  // OpenMM::Continuous3DFunction *vdwGridFunctions[numOfVdwGridsUsed];
-  // OpenMM::CustomCompoundBondForce *vdwGridPotentials[numOfVdwGridsUsed];
-
-  // std::string formula;
-  // for(int k = 0; k < numOfVdwGridsUsed; k++)
-  // {
-  //   for(int i = 0; i < xdim*ydim*zdim; i++)
-  //   {
-  //     tmpGridValue[i] = usedGridValues[k*xdim*ydim*zdim + i] * OpenMM::KJPerKcal;
-  //   }
-  //   vdwGridFunctions[k] =
-  //     new OpenMM::Continuous3DFunction(xdim, ydim, zdim,
-  // 				       tmpGridValue,
-  // 				       xmin * OpenMM::NmPerAngstrom,
-  // 				       xmax * OpenMM::NmPerAngstrom,
-  // 				       ymin * OpenMM::NmPerAngstrom,
-  // 				       ymax * OpenMM::NmPerAngstrom,
-  // 				       zmin * OpenMM::NmPerAngstrom,
-  // 				       zmax * OpenMM::NmPerAngstrom);
-  //   formula = "vdwGrid";
-  //   formula += std::to_string(k);
-  //   formula += "(x1,y1,z1) * sqrt(epsilon)";
-    
-  //   vdwGridPotentials[k] = new OpenMM::CustomCompoundBondForce(1, formula);
-  //   vdwGridPotentials[k]->setForceGroup(11);
-  //   sys->addForce(vdwGridPotentials[k]);
-  //   formula = "vdwGrid";
-  //   formula += std::to_string(k);
-	
-  //   vdwGridPotentials[k]->addTabulatedFunction(formula, vdwGridFunctions[k]);
-  //   vdwGridPotentials[k]->addPerBondParameter("epsilon");
-
-  //   for (int i = 0; i < idxOfAtomVdwRadius[idxOfVdwUsed[k]].size(); i++)
-  //   {
-  //     int idx = idxOfAtomVdwRadius[idxOfVdwUsed[k]][i];
-  //     idxParticle[0] = idx;
-  //     parameter[0] = atomEpsilons[idx];
-  //     vdwGridPotentials[k]->addBond(idxParticle, parameter);
-  //   }
-  // }
-  
-  // // get the energy
-  // OpenMM::VerletIntegrator integrator(0.001);
-  // OpenMM::Context context(*sys, integrator);
-  // printf( "REMARK  Add custom force Using OpenMM platform %s\n",
-  // 	  context.getPlatform().getName().c_str() );
-
-  // OpenMM::State state;
-  // std::vector<OpenMM::Vec3> position(sys->getNumParticles());
-
-  // for(int i = 0; i < sys->getNumParticles(); i++)
-  // {
-  //   position[i] = OpenMM::Vec3(mol.GetCoordinates()[i*3+0]*OpenMM::NmPerAngstrom,
-  // 			       mol.GetCoordinates()[i*3+1]*OpenMM::NmPerAngstrom,
-  // 			       mol.GetCoordinates()[i*3+2]*OpenMM::NmPerAngstrom);
-  // }
-  // context.setPositions(position);
-
-  // state = context.getState(OpenMM::State::Energy);
-  // std::cout << "Potential Energy: " << state.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
 
   //// do translation and rotation search using FFT
   // batch cudaFFT for potential grids
@@ -241,25 +141,88 @@ int main(int argc, char** argv)
   					   CUFFT_R2C, nBatchPotential);
   if (potentialRes != CUFFT_SUCCESS)
   {
-    std::cout << "plan creat failed!";
+    std::cout << "Potential plan creat failed!";
     return 1;
   }
   potentialRes = cufftExecR2C(potentialPlan, d_potential_f, d_potential_F);
   if (potentialRes != CUFFT_SUCCESS)
   {
-    std::cout << "transform failed!";
+    std::cout << "Potential transform failed!";
     return 1;
   }
 
-  // read quaternioins
+  // read quaternions
   int numOfTotalQuaternions = atoi(argv[4]);
-  float *quaternioins;
-  quaternioins = new float[numOfTotalQuaternions * 4];
-  ReadQuaternions(numOfTotalQuaternions, quaternioins, argv[5]);
+  std::cout << "numOfTotalQuaternions: " << numOfTotalQuaternions << std::endl;
+  float *quaternions;
+  quaternions = new float[numOfTotalQuaternions * 4];
+  ReadQuaternions(numOfTotalQuaternions, quaternions, argv[5]);
+
+  // get coor
+  float* coor;
+  coor = new float[nAtom*3];
+  for(int i = 0; i < nAtom; i++)
+  {
+    coor[i*3 + 0] = (float) mol.GetCoordinates()[i*3 + 0];
+    coor[i*3 + 1] = (float) mol.GetCoordinates()[i*3 + 1];
+    coor[i*3 + 2] = (float) mol.GetCoordinates()[i*3 + 2];
+  }
+
+  // ignore quaterions, whose end structures' dimenstion is larger than the grids
+  // rotate
+  float* coors_all_quaters;
+  coors_all_quaters = new float[numOfTotalQuaternions*nAtom*3];
+  for(int i = 0; i < numOfTotalQuaternions; i++)
+  {
+    for(int j = 0; j < nAtom; j++)
+    {
+      Rotate(&quaternions[i*4], &coor[j*3], &coors_all_quaters[i*nAtom*3+j*3]);
+    }
+  }
+
+  float mincoors_all[numOfTotalQuaternions*3]; // minimium coordinates along x, y, and z for all quaternions
+  float maxcoors_all[numOfTotalQuaternions*3]; // maximum coordinates along x, y, and z for all quaternions
+  float ligandLength_all[numOfTotalQuaternions*3]; // lenth along x, y and z for each orientation for all quaternions
+
+  // calculate minimum coor for each quaternions
+  GetMinCoors(numOfTotalQuaternions, nAtom, coors_all_quaters, mincoors_all);
+
+  // calculate maximum coor for each quaternions
+  GetMaxCoors(numOfTotalQuaternions, nAtom, coors_all_quaters, mincoors_all);
+
+  // calculate the length for each quaternion
+  for(int i = 0; i < numOfTotalQuaternions; i++)
+  {
+    ligandLength_all[i*3 + 0] = maxcoors_all[i*3 + 0] - mincoors_all[i*3 + 0];
+    ligandLength_all[i*3 + 1] = maxcoors_all[i*3 + 1] - mincoors_all[i*3 + 1];
+    ligandLength_all[i*3 + 2] = maxcoors_all[i*3 + 2] - mincoors_all[i*3 + 2];
+  }
+
+  // index of quaternions which keep the ligand dimenstion smaller than grids
+  std::vector <int> idxOfQuatersUsed;
+  for(int i = 0; i < numOfTotalQuaternions; i++)
+  {
+    if(ligandLength_all[i*3 + 0] < xdim && ligandLength_all[i*3 + 1] < ydim && ligandLength_all[i*3 + 2] < zdim)
+    {
+      idxOfQuatersUsed.push_back(i);
+    }
+  }
+
+  size_t numOfQuaternionsUsed = idxOfQuatersUsed.size();
+  std::cout << "numOfQuaternionsUsed: " << numOfQuaternionsUsed << std::endl;
+  float* quaternionsUsed;
+  quaternionsUsed = new float[numOfQuaternionsUsed*4];
+  for(int i = 0; i < numOfQuaternionsUsed; i++)
+  {
+    quaternionsUsed[i*4 + 0] = quaternions[idxOfQuatersUsed[i]*4 + 0];
+    quaternionsUsed[i*4 + 1] = quaternions[idxOfQuatersUsed[i]*4 + 1];
+    quaternionsUsed[i*4 + 2] = quaternions[idxOfQuatersUsed[i]*4 + 2];
+    quaternionsUsed[i*4 + 3] = quaternions[idxOfQuatersUsed[i]*4 + 3];
+  }
   
   // loop over all batches for different orientation
-  int numOfQuaternionsOneBatch = 100;
-  int numOfBatches = numOfTotalQuaternions / numOfQuaternionsOneBatch + 1;
+  int numOfQuaternionsOneBatch = 50;
+  int numOfBatches = numOfQuaternionsUsed / numOfQuaternionsOneBatch + 1;
     
   // allocate the data structures which will be used
   float *coors; // rotated coordinates
@@ -284,7 +247,7 @@ int main(int argc, char** argv)
   					CUFFT_R2C, nBatchLigand);
   if (ligandRes != CUFFT_SUCCESS)
   {
-    std::cout << "plan creat failed!";
+    std::cout << "ligand plan creat failed!";
     return 1;
   }
 
@@ -306,21 +269,12 @@ int main(int argc, char** argv)
   					 CUFFT_C2R, numOfQuaternionsOneBatch);
   if (ligandRRes != CUFFT_SUCCESS)
   {
-    std::cout << "plan creat failed!";
+    std::cout << "ligand reverse plan creat failed!" << std::endl;
+    std::cout << "Error code: " << ligandRRes << std::endl;
     return 1;
   }
   float* energy;
   energy = new float[numOfQuaternionsOneBatch*idist];
-
-  // get coor
-  float* coor;
-  coor = new float[nAtom*3];
-  for(int i = 0; i < nAtom; i++)
-  {
-    coor[i*3 + 0] = (float) mol.GetCoordinates()[i*3 + 0];
-    coor[i*3 + 1] = (float) mol.GetCoordinates()[i*3 + 1];
-    coor[i*3 + 2] = (float) mol.GetCoordinates()[i*3 + 2];
-  }
 
   int minEnergyQ = 0;
   int minEnergyIdxX = 0;
@@ -334,11 +288,11 @@ int main(int argc, char** argv)
     // rotate
     for(int i = 0; i < numOfQuaternionsOneBatch; i++)
     {
-      if (idxOfBatch*numOfQuaternionsOneBatch + i < numOfTotalQuaternions)
+      if (idxOfBatch*numOfQuaternionsOneBatch + i < numOfQuaternionsUsed)
       {
 	for(int j = 0; j < nAtom; j++)
 	{
-	  Rotate(&quaternioins[(idxOfBatch*numOfQuaternionsOneBatch + i)*4], &coor[j*3], &coors[i*nAtom*3+j*3]);
+	  Rotate(&quaternionsUsed[(idxOfBatch*numOfQuaternionsOneBatch + i)*4], &coor[j*3], &coors[i*nAtom*3+j*3]);
 	}
       }
     }
@@ -375,7 +329,7 @@ int main(int argc, char** argv)
     ligandRes = cufftExecR2C(ligandPlan, d_ligand_f, d_ligand_F);
     if (ligandRes != CUFFT_SUCCESS)
     {
-      std::cout << "transform failed!";
+      std::cout << "ligand transform failed!";
       return 1;
     }
 
@@ -389,7 +343,7 @@ int main(int argc, char** argv)
     ligandRRes = cufftExecC2R(ligandRPlan, d_ligand_sum_F, d_ligand_sum_f);
     if (ligandRRes != CUFFT_SUCCESS)
     {
-      std::cout << "transform failed!";
+      std::cout << "ligand reverse transform failed!";
       return 1;
     }
 
@@ -406,7 +360,7 @@ int main(int argc, char** argv)
 	{
 	  for(int k = 0; k < (zdim-int(ligandLength[q*3+2]/spacing)-2); k++)
 	  {
-	    if(idxOfBatch*numOfQuaternionsOneBatch + q < numOfTotalQuaternions)
+	    if(idxOfBatch*numOfQuaternionsOneBatch + q < numOfQuaternionsUsed)
 	    {
 	      int tmp = q*idist + (i*ydim + j)*zdim + k;
 	      if((energy[tmp]/sqrt(idist)) < minEnergy)
@@ -428,7 +382,7 @@ int main(int argc, char** argv)
   float minEnergyCoor[nAtom*3];
   for(int i = 0; i < nAtom; i++)
   {
-    Rotate(&quaternioins[minEnergyQ*4], &coor[i*3], &minEnergyCoor[i*3]);
+    Rotate(&quaternionsUsed[minEnergyQ*4], &coor[i*3], &minEnergyCoor[i*3]);
   }
   
   float minEnergyMinX = minEnergyCoor[0];
