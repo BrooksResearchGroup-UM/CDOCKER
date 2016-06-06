@@ -21,6 +21,7 @@
 #include "FillLigandGrid.h"
 #include "GeneConformations.h"
 #include "kernel.h"
+#include "QuaternionUniformSampling.h"
 
 #define CUDA_CALL(F)  if( (F) != cudaSuccess ) \
   {printf("Error %s at %s:%d\n", cudaGetErrorString(cudaGetLastError()), \
@@ -151,12 +152,19 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  // read quaternions
+  // // read quaternions
+  // int numOfTotalQuaternions = atoi(argv[4]);
+  // std::cout << "numOfTotalQuaternions: " << numOfTotalQuaternions << std::endl;
+  // float *quaternions;
+  // quaternions = new float[numOfTotalQuaternions * 4];
+  // ReadQuaternions(numOfTotalQuaternions, quaternions, argv[5]);
+
+  // generate uniform quaternions
   int numOfTotalQuaternions = atoi(argv[4]);
-  std::cout << "numOfTotalQuaternions: " << numOfTotalQuaternions << std::endl;
-  float *quaternions;
-  quaternions = new float[numOfTotalQuaternions * 4];
-  ReadQuaternions(numOfTotalQuaternions, quaternions, argv[5]);
+  float* quaternions;
+  std::random_device rd;
+  std::mt19937_64 gen(rd());
+  QuaternionUniformSampling(gen, quaternions, numOfTotalQuaternions);
 
   // get coor
   float* coor;
@@ -394,14 +402,6 @@ int main(int argc, char** argv)
     if (minEnergyCoor[i*3+1] < minEnergyMinY) { minEnergyMinY = minEnergyCoor[i*3+1]; }
     if (minEnergyCoor[i*3+2] < minEnergyMinZ) { minEnergyMinZ = minEnergyCoor[i*3+2]; }
   }
-
-  // std::cout << "minEnergyMinX: " << minEnergyMinX << std::endl;
-  // std::cout << "minEnergyMinY: " << minEnergyMinY << std::endl;
-  // std::cout << "minEnergyMinZ: " << minEnergyMinZ << std::endl;
-  
-  // std::cout << "xmin: " << xmin << std::endl;
-  // std::cout << "ymin: " << ymin << std::endl;
-  // std::cout << "zmin: " << zmin << std::endl;
   
   double minEnergyCoorDouble[nAtom*3];
   for(int i = 0; i < nAtom; i++)
