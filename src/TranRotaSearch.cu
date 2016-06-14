@@ -22,6 +22,7 @@
 #include "GeneConformations.h"
 #include "kernel.h"
 #include "QuaternionUniformSampling.h"
+#include "FilterQuaternions.h"
 
 #define CUDA_CALL(F)  if( (F) != cudaSuccess ) \
   {printf("Error %s at %s:%d\n", cudaGetErrorString(cudaGetLastError()), \
@@ -51,7 +52,7 @@ int main(int argc, char** argv)
   sysFile.open(argv[2], std::ifstream::in);
   if (sysFile.fail())
   {
-    std::cout << "Open system file failed: " << argv[4] << std::endl;    return 1;
+    std::cout << "Open system file failed: " << argv[2] << std::endl;    return 1;
   }
   OpenMM::System *sys = new OpenMM::System();
   sys = OpenMM::XmlSerializer::deserialize<OpenMM::System>(sysFile);
@@ -177,59 +178,16 @@ int main(int argc, char** argv)
   }
 
   // ignore quaterions, whose end structures' dimenstion is larger than the grids
-  // rotate
-  float* coors_all_quaters;
-  coors_all_quaters = new float[numOfTotalQuaternions*nAtom*3];
-  for(int i = 0; i < numOfTotalQuaternions; i++)
-  {
-    for(int j = 0; j < nAtom; j++)
-    {
-      Rotate(&quaternions[i*4], &coor[j*3], &coors_all_quaters[i*nAtom*3+j*3]);
-    }
-  }
-
-  float mincoors_all[numOfTotalQuaternions*3]; // minimium coordinates along x, y, and z for all quaternions
-  float maxcoors_all[numOfTotalQuaternions*3]; // maximum coordinates along x, y, and z for all quaternions
-  float ligandLength_all[numOfTotalQuaternions*3]; // lenth along x, y and z for each orientation for all quaternions
-
-  // calculate minimum coor for each quaternions
-  GetMinCoors(numOfTotalQuaternions, nAtom, coors_all_quaters, mincoors_all);
-
-  // calculate maximum coor for each quaternions
-  GetMaxCoors(numOfTotalQuaternions, nAtom, coors_all_quaters, mincoors_all);
-
-  // calculate the length for each quaternion
-  for(int i = 0; i < numOfTotalQuaternions; i++)
-  {
-    ligandLength_all[i*3 + 0] = maxcoors_all[i*3 + 0] - mincoors_all[i*3 + 0];
-    ligandLength_all[i*3 + 1] = maxcoors_all[i*3 + 1] - mincoors_all[i*3 + 1];
-    ligandLength_all[i*3 + 2] = maxcoors_all[i*3 + 2] - mincoors_all[i*3 + 2];
-  }
-
-  // index of quaternions which keep the ligand dimenstion smaller than grids
-  std::vector <int> idxOfQuatersUsed;
-  for(int i = 0; i < numOfTotalQuaternions; i++)
-  {
-    if(ligandLength_all[i*3 + 0] < xdim && ligandLength_all[i*3 + 1] < ydim && ligandLength_all[i*3 + 2] < zdim)
-    {
-      idxOfQuatersUsed.push_back(i);
-    }
-  }
-
-  size_t numOfQuaternionsUsed = idxOfQuatersUsed.size();
-  std::cout << "numOfQuaternionsUsed: " << numOfQuaternionsUsed << std::endl;
-  float* quaternionsUsed;
-  quaternionsUsed = new float[numOfQuaternionsUsed*4];
-  for(int i = 0; i < numOfQuaternionsUsed; i++)
-  {
-    quaternionsUsed[i*4 + 0] = quaternions[idxOfQuatersUsed[i]*4 + 0];
-    quaternionsUsed[i*4 + 1] = quaternions[idxOfQuatersUsed[i]*4 + 1];
-    quaternionsUsed[i*4 + 2] = quaternions[idxOfQuatersUsed[i]*4 + 2];
-    quaternionsUsed[i*4 + 3] = quaternions[idxOfQuatersUsed[i]*4 + 3];
-  }
+  size_t maxNQuaternionsUsed = atoi(argv[5]);
+  size_t numOfQuaternionsUsed;
+  float* quaternionsUsed = 0;  
+  numOfQuaternionsUsed = FilterQuaternions(coor, nAtom,
+  					   numOfTotalQuaternions, quaternions,
+  					   xlen, ylen, zlen,
+  					   maxNQuaternionsUsed,quaternionsUsed);
   
   // loop over all batches for different orientation
-  int numOfQuaternionsOneBatch = 50;
+  int numOfQuaternionsOneBatch = 100;
   int numOfBatches = numOfQuaternionsUsed / numOfQuaternionsOneBatch + 1;
     
   // allocate the data structures which will be used
@@ -284,12 +242,17 @@ int main(int argc, char** argv)
   float* energy;
   energy = new float[numOfQuaternionsOneBatch*idist];
 
-  int minEnergyQ = 0;
-  int minEnergyIdxX = 0;
-  int minEnergyIdxY = 0;
-  int minEnergyIdxZ = 0;
-  float minEnergy = INFINITY;
-    
+  // save information for each quaternion
+  int minEnergyIdxX[numOfQuaternionsUsed];
+  int minEnergyIdxY[numOfQuaternionsUsed];
+  int minEnergyIdxZ[numOfQuaternionsUsed];
+  std::vector <float> minEnergyAllQ(numOfQuaternionsUsed);
+  for(int i = 0; i < numOfQuaternionsUsed; i++)
+  {
+    minEnergyAllQ[i] = INFINITY;
+  }
+
+  // do the calculation
   for(int idxOfBatch = 0; idxOfBatch < numOfBatches; idxOfBatch++)
   {
     std::cout << "idxOfBatch: " << idxOfBatch << std::endl;
@@ -360,8 +323,10 @@ int main(int argc, char** argv)
 	       cudaMemcpyDeviceToHost);
 
     // record the minimum energy pose in terms of quaternions, x, y and z
+    // this needs to be rewriten as a GPU kernel in the future
     for(int q = 0; q < numOfQuaternionsOneBatch; q++)
     {
+      int idxQ = idxOfBatch * numOfQuaternionsOneBatch + q;
       for(int i = 0; i < (xdim-int(ligandLength[q*3+0]/spacing)-2); i++)
       {
 	for(int j = 0; j < (ydim-int(ligandLength[q*3+1]/spacing)-2); j++)
@@ -371,58 +336,65 @@ int main(int argc, char** argv)
 	    if(idxOfBatch*numOfQuaternionsOneBatch + q < numOfQuaternionsUsed)
 	    {
 	      int tmp = q*idist + (i*ydim + j)*zdim + k;
-	      if((energy[tmp]/sqrt(idist)) < minEnergy)
+	      if((energy[tmp]/sqrt(idist)) < minEnergyAllQ[idxQ])
 	      {
-		minEnergy = energy[tmp] / sqrt(idist);
-		minEnergyQ = idxOfBatch * numOfQuaternionsOneBatch + q;
-		minEnergyIdxX = i;
-		minEnergyIdxY = j;
-		minEnergyIdxZ = k;
+		minEnergyAllQ[idxQ] = energy[tmp] / sqrt(idist);
+		minEnergyIdxX[idxQ] = i;
+		minEnergyIdxY[idxQ] = j;
+		minEnergyIdxZ[idxQ] = k;
 	      }
 	    }
 	  }
 	}
       }
     }
+    
   }
 
-  // calculate the coordinates corresponding to minimum energy
-  float minEnergyCoor[nAtom*3];
-  for(int i = 0; i < nAtom; i++)
+  // calculate the coordinates corresponding to lowest nLowest energy orientation
+  std::vector<size_t> idxLowestQ;
+  idxLowestQ = sort_index<float>(minEnergyAllQ);
+
+  int nLowest = atoi(argv[6]);
+  for(int iLowest = 0; iLowest < nLowest && iLowest < numOfQuaternionsUsed; iLowest++)
   {
-    Rotate(&quaternionsUsed[minEnergyQ*4], &coor[i*3], &minEnergyCoor[i*3]);
-  }
+    float minEnergyCoor[nAtom*3];
+    for(int i = 0; i < nAtom; i++)
+    {
+      Rotate(&quaternionsUsed[idxLowestQ[iLowest]*4], &coor[i*3], &minEnergyCoor[i*3]);
+    }
   
-  float minEnergyMinX = minEnergyCoor[0];
-  float minEnergyMinY = minEnergyCoor[1];
-  float minEnergyMinZ = minEnergyCoor[2];
-  for(int i = 1; i < nAtom; i++)
-  {
-    if (minEnergyCoor[i*3+0] < minEnergyMinX) { minEnergyMinX = minEnergyCoor[i*3+0]; }
-    if (minEnergyCoor[i*3+1] < minEnergyMinY) { minEnergyMinY = minEnergyCoor[i*3+1]; }
-    if (minEnergyCoor[i*3+2] < minEnergyMinZ) { minEnergyMinZ = minEnergyCoor[i*3+2]; }
-  }
+    float minEnergyMinX = minEnergyCoor[0];
+    float minEnergyMinY = minEnergyCoor[1];
+    float minEnergyMinZ = minEnergyCoor[2];
+    for(int i = 1; i < nAtom; i++)
+    {
+      if (minEnergyCoor[i*3+0] < minEnergyMinX) { minEnergyMinX = minEnergyCoor[i*3+0]; }
+      if (minEnergyCoor[i*3+1] < minEnergyMinY) { minEnergyMinY = minEnergyCoor[i*3+1]; }
+      if (minEnergyCoor[i*3+2] < minEnergyMinZ) { minEnergyMinZ = minEnergyCoor[i*3+2]; }
+    }
   
-  double minEnergyCoorDouble[nAtom*3];
-  for(int i = 0; i < nAtom; i++)
-  {
-    minEnergyCoorDouble[i*3 + 0] = (double) minEnergyCoor[i*3 + 0];
-    minEnergyCoorDouble[i*3 + 1] = (double) minEnergyCoor[i*3 + 1];
-    minEnergyCoorDouble[i*3 + 2] = (double) minEnergyCoor[i*3 + 2];
+    double minEnergyCoorDouble[nAtom*3];
+    for(int i = 0; i < nAtom; i++)
+    {
+      minEnergyCoorDouble[i*3 + 0] = (double) minEnergyCoor[i*3 + 0];
+      minEnergyCoorDouble[i*3 + 1] = (double) minEnergyCoor[i*3 + 1];
+      minEnergyCoorDouble[i*3 + 2] = (double) minEnergyCoor[i*3 + 2];
+    }
+    
+    for(int i = 0; i < nAtom; i++)
+    {
+      minEnergyCoorDouble[i*3 + 0] += (xmin - minEnergyMinX + minEnergyIdxX[idxLowestQ[iLowest]] * spacing);
+      minEnergyCoorDouble[i*3 + 1] += (ymin - minEnergyMinY + minEnergyIdxY[idxLowestQ[iLowest]] * spacing);
+      minEnergyCoorDouble[i*3 + 2] += (zmin - minEnergyMinZ + minEnergyIdxZ[idxLowestQ[iLowest]] * spacing);
+    }
+    
+    mol.SetCoordinates(minEnergyCoorDouble);
+    fileName = "TranRotaSearch_";
+    fileName += std::to_string(iLowest);
+    fileName += ".pdb";
+    conv.WriteFile(&mol, fileName);
+    std::cout << "MinEnergy_" << iLowest << ":" << minEnergyAllQ[idxLowestQ[iLowest]] << std::endl;
   }
-
-  for(int i = 0; i < nAtom; i++)
-  {
-    minEnergyCoorDouble[i*3 + 0] += (xmin - minEnergyMinX + minEnergyIdxX * spacing);
-    minEnergyCoorDouble[i*3 + 1] += (ymin - minEnergyMinY + minEnergyIdxY * spacing);
-    minEnergyCoorDouble[i*3 + 2] += (zmin - minEnergyMinZ + minEnergyIdxZ * spacing);
-  }
-
-  mol.SetCoordinates(minEnergyCoorDouble);
-  fileName = "TranRotaSearch";
-  fileName += ".pdb";
-  conv.WriteFile(&mol, fileName);
-
-  std::cout << "MinEnergy: " << minEnergy << std::endl;
   return 0;
 }

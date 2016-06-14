@@ -1,3 +1,4 @@
+#include <iostream>
 #include "OpenMM.h"
 #include "GetNonbondedParameters.h"
 
@@ -15,6 +16,11 @@ void GetNonbondedParameters(OpenMM::System *sys,
     }
   }
 
+  // nonbondedForce->setCutoffDistance(1.2);
+  // std::cout << "method: " << nonbondedForce->getNonbondedMethod() << std::endl;
+  nonbondedForce->setNonbondedMethod(nonbondedForce->NoCutoff);
+  //std::cout << "method: " << nonbondedForce->getNonbondedMethod() << std::endl;
+  
   // get the charge, sigma, epsilon for each particle
   double tmpcharge, tmpsigma, tmpepsilon;
   float sigma[sys->getNumParticles()];
@@ -24,5 +30,6 @@ void GetNonbondedParameters(OpenMM::System *sys,
     vdwRadii[i] = tmpsigma * OpenMM::VdwRadiusPerSigma * OpenMM::AngstromsPerNm;
     epsilon[i] = tmpepsilon * OpenMM::KcalPerKJ;
     charge[i] = tmpcharge;
-  }  
+
+  }
 };

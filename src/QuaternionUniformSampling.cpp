@@ -5,6 +5,7 @@
 void QuaternionUniformSampling(std::mt19937_64& gen, float* &quaters, int nQuaters)
 {
   std::uniform_real_distribution<double> udist(0,1);
+  delete[] quaters;
   quaters = new float[4*nQuaters];
   double s, sigma1, sigma2, theta1, theta2;
   for(int i = 0; i < nQuaters; i++)
