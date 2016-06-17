@@ -1,4 +1,5 @@
 #include "GetMinCoors.h"
+#include <iostream>
 
 void GetMinCoors(int nQuaternions, int nAtoms, float *coors, float* mincoors)
 {
@@ -8,11 +9,21 @@ void GetMinCoors(int nQuaternions, int nAtoms, float *coors, float* mincoors)
     mincoors[i*3 + 0] = coors[i*nAtoms*3 + 0];
     mincoors[i*3 + 1] = coors[i*nAtoms*3 + 1];
     mincoors[i*3 + 2] = coors[i*nAtoms*3 + 2];
+
     for (int k = 1; k < nAtoms; k++)
     {
-      if (coors[(i*nAtoms+k)*3 + 0] < mincoors[i*3 + 0]) { mincoors[i*3 + 0] = coors[(i*nAtoms+k)*3 + 0]; }
-      if (coors[(i*nAtoms+k)*3 + 1] < mincoors[i*3 + 1]) { mincoors[i*3 + 1] = coors[(i*nAtoms+k)*3 + 1]; }
-      if (coors[(i*nAtoms+k)*3 + 2] < mincoors[i*3 + 2]) { mincoors[i*3 + 2] = coors[(i*nAtoms+k)*3 + 2]; }
+      if (coors[(i*nAtoms+k)*3 + 0] < mincoors[i*3 + 0])
+      {
+	mincoors[i*3 + 0] = coors[(i*nAtoms+k)*3 + 0];
+      }
+      if (coors[(i*nAtoms+k)*3 + 1] < mincoors[i*3 + 1])
+      {
+	mincoors[i*3 + 1] = coors[(i*nAtoms+k)*3 + 1];
+      }
+      if (coors[(i*nAtoms+k)*3 + 2] < mincoors[i*3 + 2])
+      {
+	mincoors[i*3 + 2] = coors[(i*nAtoms+k)*3 + 2];
+      }
     }
   }
 }

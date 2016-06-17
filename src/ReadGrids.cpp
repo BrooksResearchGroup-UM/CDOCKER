@@ -1,5 +1,6 @@
 #include <fstream>
 #include <iostream>
+#include <string>
 #include "ReadGrids.h"
 
 void ReadGrids(int &numOfGrids, int &xdim, int &ydim, int &zdim,
@@ -7,7 +8,7 @@ void ReadGrids(int &numOfGrids, int &xdim, int &ydim, int &zdim,
 	       float &xlen, float &ylen, float &zlen,
 	       float &spacing, float &restraint_k,
 	       float *&raddi, float* &values,
-	       char *fileName)
+	       std::string fileName)
 {
   std::ifstream inFile;
   inFile.open(fileName, std::ios::in);

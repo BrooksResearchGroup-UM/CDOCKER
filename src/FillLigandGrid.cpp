@@ -1,5 +1,7 @@
 #include <vector>
 #include <math.h>
+#include <iostream>
+
 #include "FillLigandGrid.h"
 
 void FillLigandGrid(int nQuaternions,
@@ -10,14 +12,14 @@ void FillLigandGrid(int nQuaternions,
 		    int xdim, int ydim, int zdim,
 		    float spacing, float *ligandGridValues
 		    )
-{  
+{
   // fill the vdw grids
   for (int i = 0; i < nQuaternions; i++)
   {
     for (int j = 0; j < idxOfVdwUsed.size(); j++)
     {
       for (int l = 0; l < idxOfAtomVdwRadius[idxOfVdwUsed[j]].size(); l++)
-      {
+      {	
 	int m = idxOfAtomVdwRadius[idxOfVdwUsed[j]][l];
 	double x = coors[(i*nAtoms + m)*3 + 0];
 	double y = coors[(i*nAtoms + m)*3 + 1];
@@ -35,9 +37,12 @@ void FillLigandGrid(int nQuaternions,
 	// index of ligandGridValue
 	int idxGrid = i * (numOfVdwGridsUsed + 1) + j;
 	int idxValue = idxGrid * xdim * ydim * zdim;
-	
+
 	int index = (xIndex * ydim + yIndex) * zdim + zIndex;
+	
 	ligandGridValues[idxValue + index] += sqrt(atomEpsilons[m]) * (1 - xRatio) * (1 - yRatio) * (1 - zRatio);
+	
+	// std::cout << "Here we go 2" << std::endl;
 	
 	index = (xIndex * ydim + yIndex) * zdim + zIndex + 1;
 	ligandGridValues[idxValue + index] += sqrt(atomEpsilons[m]) * (1 - xRatio) * (1 - yRatio) * zRatio;
@@ -59,6 +64,9 @@ void FillLigandGrid(int nQuaternions,
 	
 	index = ((xIndex + 1) * ydim + yIndex + 1) * zdim + zIndex + 1;
 	ligandGridValues[idxValue + index] += sqrt(atomEpsilons[m]) * xRatio * yRatio * zRatio;
+
+	
+
       }
     }
   }

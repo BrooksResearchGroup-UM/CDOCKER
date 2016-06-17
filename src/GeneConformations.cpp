@@ -21,14 +21,14 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxNumOfCo
   {
     std::cout << "no rotatable bonds found in molecule" << std::endl;
     coorsConformers = new double[mol.NumAtoms()*3];
-    memcpy(coorsConformers, mol.GetCoordinates(), sizeof(float)*mol.NumAtoms()*3);
+    memcpy(coorsConformers, mol.GetCoordinates(), sizeof(double)*mol.NumAtoms()*3);
     return 1;
   }
 
   //// When the ligand has rotatable bonds
   ////  generate random conformers  
   int N = 2000;  // num of random conformers from which centers are selected
-  N = 200;
+
   OpenBabel::OBMol mols[N];
   for(int i = 0; i < N; i++)
   {
@@ -42,7 +42,7 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxNumOfCo
     for(rotorIter = rotors.BeginRotors(); rotorIter != rotors.EndRotors(); rotorIter++)
     {
       double tmp = M_PI * (rand() / ((float) RAND_MAX) - 0.5) * 2;
-      // (*rotorIter)->SetToAngle(mols[i].GetCoordinates(), tmp);
+      (*rotorIter)->SetToAngle(mols[i].GetCoordinates(), tmp);
     }
   }
   std::cout << "random  rotor done" << std::endl;
@@ -69,7 +69,7 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxNumOfCo
 				 mols[k].GetCoordinates()[i*3+2]*OpenMM::NmPerAngstrom);
     }
     context.setPositions(position);
-    // minimizer.minimize(context, 10, 30);
+    minimizer.minimize(context, 10, 30);
     state = context.getState(OpenMM::State::Positions | OpenMM::State::Energy);
     energy[k] = state.getPotentialEnergy()*OpenMM::KcalPerKJ;
     position = state.getPositions();
