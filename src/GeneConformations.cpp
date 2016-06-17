@@ -11,7 +11,7 @@
 #include <openbabel/math/align.h>
 #include "GeneConformations.h"
 
-int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coorsConformers)
+int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxNumOfConformations, double* &coorsConformers)
 {
   // check if the mol has rotatable bonds
   OpenBabel::OBRotorList rotors; // rotatable bonds 
@@ -19,7 +19,7 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coors
   ifHasRotors = rotors.Setup(mol);
   if (! ifHasRotors) // this is a rigid ligand
   {
-    std::cout << "no rotatable bonds found in molecule" << std::cout;
+    std::cout << "no rotatable bonds found in molecule" << std::endl;
     coorsConformers = new double[mol.NumAtoms()*3];
     memcpy(coorsConformers, mol.GetCoordinates(), sizeof(float)*mol.NumAtoms()*3);
     return 1;
@@ -42,7 +42,7 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coors
     for(rotorIter = rotors.BeginRotors(); rotorIter != rotors.EndRotors(); rotorIter++)
     {
       double tmp = M_PI * (rand() / ((float) RAND_MAX) - 0.5) * 2;
-      (*rotorIter)->SetToAngle(mols[i].GetCoordinates(), tmp);
+      // (*rotorIter)->SetToAngle(mols[i].GetCoordinates(), tmp);
     }
   }
   std::cout << "random  rotor done" << std::endl;
@@ -69,7 +69,7 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coors
 				 mols[k].GetCoordinates()[i*3+2]*OpenMM::NmPerAngstrom);
     }
     context.setPositions(position);
-    minimizer.minimize(context, 10, 30);
+    // minimizer.minimize(context, 10, 30);
     state = context.getState(OpenMM::State::Positions | OpenMM::State::Energy);
     energy[k] = state.getPotentialEnergy()*OpenMM::KcalPerKJ;
     position = state.getPositions();
@@ -97,11 +97,16 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coors
     {     
       align.SetTargetMol(mols[idxCenter[j]]);
       align.Align();
-      if(align.GetRMSD() < cutOff) {ifNewCenter = false; break;}
+      if(align.GetRMSD() <= cutOff) {ifNewCenter = false; break;}
     }
     if (ifNewCenter)
     {
       idxCenter.push_back(idx[i]);
+    }
+    // maxNumOfConformations
+    if (idxCenter.size() == maxNumOfConformations)
+    {
+      break;
     }
   }
   

@@ -35,6 +35,9 @@
    __FILE__,__LINE__-1); exit(-1);} 
 
 //// main function ////
+// Usage:
+// TranRotaConfSearch .mol2 sys.xml grid.txt maxNumOfConf numOfRotaPerConf nLowest
+
 int main(int argc, char** argv)
 {
   OpenMM::Platform::loadPluginsFromDirectory(
@@ -54,22 +57,11 @@ int main(int argc, char** argv)
   sysFile.open(argv[2], std::ifstream::in);
   if (sysFile.fail())
   {
-    std::cout << "Open system file failed: " << argv[2] << std::endl;    return 1;
+    std::cout << "Open system file failed: " << argv[2] << std::endl;
+    return 1;
   }
   OpenMM::System *sys = new OpenMM::System();
   sys = OpenMM::XmlSerializer::deserialize<OpenMM::System>(sysFile);
-
-  // random clustered conformations
-  double *coorsConformations;
-  int numOfConformations;
-  numOfConformations = GeneConformations(mol, sys, coorsConformations);
-  std::cout << "numOfConformations: " << numOfConformations << std::endl;  
-
-  // get nonbonded parameters
-  float atomCharges[nAtom];
-  float atomEpsilons[nAtom];
-  float atomRadii[nAtom];
-  GetNonbondedParameters(sys, atomCharges, atomEpsilons, atomRadii);
 
   // read grid potential
   int numOfGrids, xdim, ydim, zdim;
@@ -85,6 +77,18 @@ int main(int argc, char** argv)
   	    argv[3]);
   int numOfVdwGrids = numOfGrids - 1;
 
+  // // random clustered conformations
+  // double *coorsConformations;
+  // int numOfConformations;
+  // int maxNumOfConformations = atoi(argv[4]);
+  // numOfConformations = GeneConformations(mol, sys, maxNumOfConformations, coorsConformations);
+
+  // get nonbonded parameters
+  float atomCharges[nAtom];
+  float atomEpsilons[nAtom];
+  float atomRadii[nAtom];
+  GetNonbondedParameters(sys, atomCharges, atomEpsilons, atomRadii);
+
   // get index of atoms for each vdw radius
   int numOfVdwGridsUsed;
   std::vector<int> idxOfVdwUsed;
@@ -94,7 +98,7 @@ int main(int argc, char** argv)
   			    numOfVdwGridsUsed, idxOfVdwUsed,
   			    idxOfAtomVdwRadius);
   int numOfGridsUsed = numOfVdwGridsUsed + 1;
-
+  
   // copy out the potential grids which are used
   float *usedGridValues;
   usedGridValues = new float[numOfGridsUsed*xdim*ydim*zdim];
@@ -131,340 +135,385 @@ int main(int argc, char** argv)
   printf( "REMARK  Add custom force Using OpenMM platform %s\n",
   	  context.getPlatform().getName().c_str() );
   OpenMM::State state;
-  OpenMM::LocalEnergyMinimizer minimizer;
   std::vector<OpenMM::Vec3> position(sys->getNumParticles());
-
-  // batch cudaFFT for potential grids
-  int n[3];
-  n[0] = xdim;
-  n[1] = ydim;
-  n[2] = zdim;
-  int inembed[3];
-  inembed[0] = xdim;
-  inembed[1] = ydim;
-  inembed[2] = zdim;
-  int idist = inembed[0] * inembed[1] * inembed[2];
-  int istride = 1;
-  
-  int onembed[3];
-  onembed[0] = xdim;
-  onembed[1] = ydim;
-  onembed[2] = zdim/2 + 1;
-  int odist = onembed[0] * onembed[1] * onembed[2];
-  int ostride = 1;
-  int nBatchPotential = numOfGridsUsed;
-  
-  cufftReal* d_potential_f;
-  cudaMalloc((void **)&d_potential_f, sizeof(cufftReal)*nBatchPotential*idist);
-  cudaMemcpy(d_potential_f, usedGridValues,
-  	     sizeof(cufftReal)*nBatchPotential*idist,
-  	     cudaMemcpyHostToDevice);
-  cufftComplex *d_potential_F;
-  cudaMalloc((void **)&d_potential_F, sizeof(cufftComplex)*nBatchPotential*odist);
-  cufftHandle potentialPlan;
-  cufftResult potentialRes = cufftPlanMany(&potentialPlan, 3, n,
-  					   inembed, istride, idist,
-  					   onembed, ostride, odist,
-  					   CUFFT_R2C, nBatchPotential);
-  if (potentialRes != CUFFT_SUCCESS)
+  for(int i = 0; i < sys->getNumParticles(); i++)
   {
-    std::cout << "plan creat failed!";
-    return 1;
+    position[i] = OpenMM::Vec3(mol.GetCoordinates()[i*3+0]*OpenMM::NmPerAngstrom,
+			       mol.GetCoordinates()[i*3+1]*OpenMM::NmPerAngstrom,
+			       mol.GetCoordinates()[i*3+2]*OpenMM::NmPerAngstrom);
   }
-  potentialRes = cufftExecR2C(potentialPlan, d_potential_f, d_potential_F);
-  if (potentialRes != CUFFT_SUCCESS)
+  for(int i = 0; i < sys->getNumParticles(); i++)
   {
-    std::cout << "transform failed!";
-    return 1;
+    std::cout << position[i][0] << "," << position[i][1] << "," << position[i][2] << std::endl;
   }
+  context.setPositions(position);
+  state = context.getState(OpenMM::State::Energy, false, 1<<10);
+  std::cout << "elec energy: " << state.getPotentialEnergy() << std::endl;
+  state = context.getState(OpenMM::State::Energy, false, 1<<11);
+  std::cout << "vdw energy: " << state.getPotentialEnergy() << std::endl;
+  state = context.getState(OpenMM::State::Energy, false, 1<<10 | 1<<11);
+  std::cout << "elec and vdw energy: " << state.getPotentialEnergy() << std::endl;
+  // state = context.getState(OpenMM::State::Energy);
+  // std::cout << state.getPotentialEnergy()
   
-  // generate uniform quaternions and setup data structure for all quaternions
-  int numOfTotalQuaternions = atoi(argv[4]);
-  float* quaternions = 0;
-  std::random_device rd;
-  std::mt19937_64 gen(rd());
+  // // batch cudaFFT for potential grids
+  // int n[3];
+  // n[0] = xdim;
+  // n[1] = ydim;
+  // n[2] = zdim;
+  // int inembed[3];
+  // inembed[0] = xdim;
+  // inembed[1] = ydim;
+  // inembed[2] = zdim;
+  // int idist = inembed[0] * inembed[1] * inembed[2];
+  // int istride = 1;
   
-  // for one batch of quaternions
-  int numOfQuaternionsOneBatch = 120;
-  int numOfBatches = 0;
+  // int onembed[3];
+  // onembed[0] = xdim;
+  // onembed[1] = ydim;
+  // onembed[2] = zdim/2 + 1;
+  // int odist = onembed[0] * onembed[1] * onembed[2];
+  // int ostride = 1;
+  // int nBatchPotential = numOfGridsUsed;
+  
+  // cufftReal* d_potential_f;
+  // cudaMalloc((void **)&d_potential_f, sizeof(cufftReal)*nBatchPotential*idist);
+  // cudaMemcpy(d_potential_f, usedGridValues,
+  // 	     sizeof(cufftReal)*nBatchPotential*idist,
+  // 	     cudaMemcpyHostToDevice);
+  // cufftComplex *d_potential_F;
+  // cudaMalloc((void **)&d_potential_F, sizeof(cufftComplex)*nBatchPotential*odist);
+  // cufftHandle potentialPlan;
+  // cufftResult potentialRes = cufftPlanMany(&potentialPlan, 3, n,
+  // 					   inembed, istride, idist,
+  // 					   onembed, ostride, odist,
+  // 					   CUFFT_R2C, nBatchPotential);
+  // if (potentialRes != CUFFT_SUCCESS)
+  // {
+  //   std::cout << "plan creat failed!";
+  //   return 1;
+  // }
+  // potentialRes = cufftExecR2C(potentialPlan, d_potential_f, d_potential_F);
+  // if (potentialRes != CUFFT_SUCCESS)
+  // {
+  //   std::cout << "transform failed!";
+  //   return 1;
+  // }
+  
+  // // generate uniform quaternions and setup data structure for all quaternions
+  // int numOfTotalQuaternions = 5000;
+  // float* quaternions = 0;
+  // std::random_device rd;
+  // std::mt19937_64 gen(rd());
+  
+  // // for one batch of quaternions
+  // int numOfQuaternionsOneBatch = 120;
+  // int numOfBatches = 0;
 
-  // ligand grid for one batch
-  float *ligandGridValues; // grid for ligand
-  ligandGridValues = new float[numOfQuaternionsOneBatch*numOfGridsUsed*xdim*ydim*zdim];
+  // // ligand grid for one batch
+  // float *ligandGridValues; // grid for ligand
+  // ligandGridValues = new float[numOfQuaternionsOneBatch*numOfGridsUsed*xdim*ydim*zdim];
   
-  // cudaFFT for ligand grid
-  int nBatchLigand = numOfQuaternionsOneBatch*numOfGridsUsed;
-  cufftReal* d_ligand_f;
-  cudaMalloc((void **)&d_ligand_f, sizeof(cufftReal)*nBatchLigand*idist);
-  cufftComplex * d_ligand_F;
-  cudaMalloc((void **)&d_ligand_F, sizeof(cufftComplex)*nBatchLigand*odist);
-  cufftHandle ligandPlan;
-  cufftResult ligandRes = cufftPlanMany(&ligandPlan, 3, n,
-  					inembed, istride, idist,
-  					onembed, ostride, odist,
-  					CUFFT_R2C, nBatchLigand);
-  if (ligandRes != CUFFT_SUCCESS)
-  {
-    std::cout << "plan creat failed!";
-    return 1;
-  }
+  // // cudaFFT for ligand grid
+  // int nBatchLigand = numOfQuaternionsOneBatch*numOfGridsUsed;
+  // cufftReal* d_ligand_f;
+  // cudaMalloc((void **)&d_ligand_f, sizeof(cufftReal)*nBatchLigand*idist);
+  // cufftComplex * d_ligand_F;
+  // cudaMalloc((void **)&d_ligand_F, sizeof(cufftComplex)*nBatchLigand*odist);
+  // cufftHandle ligandPlan;
+  // cufftResult ligandRes = cufftPlanMany(&ligandPlan, 3, n,
+  // 					inembed, istride, idist,
+  // 					onembed, ostride, odist,
+  // 					CUFFT_R2C, nBatchLigand);
+  // if (ligandRes != CUFFT_SUCCESS)
+  // {
+  //   std::cout << "plan creat failed!";
+  //   return 1;
+  // }
 
-  dim3 threads_ConjMult(1024, 1, 1);
-  dim3 blocks_ConjMult((numOfQuaternionsOneBatch*numOfGridsUsed*odist)/(1024*1024) + 1,1024,1);
+  // dim3 threads_ConjMult(1024, 1, 1);
+  // dim3 blocks_ConjMult((numOfQuaternionsOneBatch*numOfGridsUsed*odist)/(1024*1024) + 1,1024,1);
  
-  cufftComplex * d_ligand_sum_F;
-  cudaMalloc((void **)&d_ligand_sum_F, sizeof(cufftComplex)*numOfQuaternionsOneBatch*odist);
+  // cufftComplex * d_ligand_sum_F;
+  // cudaMalloc((void **)&d_ligand_sum_F, sizeof(cufftComplex)*numOfQuaternionsOneBatch*odist);
   
-  dim3 threads_SumGrids(1024, 1, 1);
-  dim3 blocks_SumGrids((numOfQuaternionsOneBatch*odist)/(1024*1024) + 1,1024,1);
+  // dim3 threads_SumGrids(1024, 1, 1);
+  // dim3 blocks_SumGrids((numOfQuaternionsOneBatch*odist)/(1024*1024) + 1,1024,1);
   
-  cufftReal *d_ligand_sum_f;
-  cudaMalloc((void **)&d_ligand_sum_f, sizeof(cufftReal)*numOfQuaternionsOneBatch*idist);
-  cufftHandle ligandRPlan;
-  cufftResult ligandRRes = cufftPlanMany(&ligandRPlan, 3, n,
-  					 onembed, ostride, odist,
-  					 inembed, istride, idist,
-  					 CUFFT_C2R, numOfQuaternionsOneBatch);
-  if (ligandRRes != CUFFT_SUCCESS)
-  {
-    std::cout << "plan creat failed!";
-    return 1;
-  }
+  // cufftReal *d_ligand_sum_f;
+  // cudaMalloc((void **)&d_ligand_sum_f, sizeof(cufftReal)*numOfQuaternionsOneBatch*idist);
+  // cufftHandle ligandRPlan;
+  // cufftResult ligandRRes = cufftPlanMany(&ligandRPlan, 3, n,
+  // 					 onembed, ostride, odist,
+  // 					 inembed, istride, idist,
+  // 					 CUFFT_C2R, numOfQuaternionsOneBatch);
+  // if (ligandRRes != CUFFT_SUCCESS)
+  // {
+  //   std::cout << "plan creat failed!";
+  //   return 1;
+  // }
 
-  // host energy 
-  float* energy;
-  energy = new float[numOfQuaternionsOneBatch*idist];
+  // // host energy 
+  // float* energy;
+  // energy = new float[numOfQuaternionsOneBatch*idist];
 
-  // coordinates for one conformation
-  float* coor;
-  coor = new float[nAtom*3];
+  // // coordinates for one conformation
+  // float* coor;
+  // coor = new float[nAtom*3];
   
-  // ignore quaterions, whose end structures' dimenstion is larger than the grids
-  size_t maxNQuaternionsUsed = atoi(argv[5]);
-  size_t numOfQuaternionsUsed;
-  float* quaternionsUsed = 0;  
-
-  int *minEnergyIdxX = 0;
-  int *minEnergyIdxY = 0;
-  int *minEnergyIdxZ = 0;
-
-  float *coorsUsed = 0;
-  float *mincoorsUsed = 0;
-  float *maxcoorsUsed = 0;
-  float *ligandLengthUsed = 0;
+  // // ignore quaterions, whose end structures' dimenstion is larger than the grids
+  // size_t maxNQuaternionsUsed = maxNumOfConformations * atoi(argv[5]) / numOfConformations + 1;
+  // if (maxNQuaternionsUsed > 2000)
+  // {
+  //   maxNQuaternionsUsed = 2000;
+  // }
   
-  for (int idxOfConformer = 0; idxOfConformer < numOfConformations; idxOfConformer++)
-  {
-    std::cout << "idxOfConformer: " << idxOfConformer << std::endl;
-    // get coordinates for one conformer
-    for(int i = 0; i < nAtom; i++)
-    {
-      coor[i*3 + 0] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 0];
-      coor[i*3 + 1] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 1];
-      coor[i*3 + 2] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 2];
-    }
+  // size_t numOfQuaternionsUsed;
+  // float* quaternionsUsed = 0;  
 
-    // generate all quaternions and ignore some quaternions, which will rotate the ligand
-    // to have larger dimension than the grid
-    QuaternionUniformSampling(gen, quaternions, numOfTotalQuaternions);
-    numOfQuaternionsUsed = FilterQuaternions(coor, nAtom,
-  					     numOfTotalQuaternions, quaternions,
-  					     xlen, ylen, zlen,
-  					     maxNQuaternionsUsed, quaternionsUsed);
+  // int *minEnergyIdxX = 0;
+  // int *minEnergyIdxY = 0;
+  // int *minEnergyIdxZ = 0;
 
-    delete[] minEnergyIdxX;
-    delete[] minEnergyIdxY;
-    delete[] minEnergyIdxZ;
-    minEnergyIdxX = new int[numOfQuaternionsUsed];
-    minEnergyIdxY = new int[numOfQuaternionsUsed];
-    minEnergyIdxZ = new int[numOfQuaternionsUsed];
-    std::vector <float> minEnergyQuaternionsUsed(numOfQuaternionsUsed);
-    for(int i = 0; i < numOfQuaternionsUsed; i++)
-    {
-      minEnergyQuaternionsUsed[i] = INFINITY;
-    }
+  // float *coorsUsed = 0;
+  // float *mincoorsUsed = 0;
+  // float *maxcoorsUsed = 0;
+  // float *ligandLengthUsed = 0;
 
-    delete[] coorsUsed;
-    delete[] mincoorsUsed;
-    delete[] maxcoorsUsed;
-    delete[] ligandLengthUsed;
-    coorsUsed = new float[numOfQuaternionsUsed*nAtom*3];
-    mincoorsUsed = new float[numOfQuaternionsUsed*3];
-    maxcoorsUsed = new float[numOfQuaternionsUsed*3];
-    ligandLengthUsed = new float[numOfQuaternionsUsed*3];
+  // // save nLowest lowest energy pose for each conformation
+  // int nLowest = atoi(argv[6]);
+  
+  // // mol for saving lowest energy pose
+  // OpenBabel::OBMol finalPoses[numOfConformations * nLowest];
+  // double energyOfFinalPoses[numOfConformations * nLowest];
+  // for(int i = 0; i < numOfConformations * nLowest; i++)
+  // {
+  //   finalPoses[i] = mol;
+  // }
+  
+  // // file for saving energy values of end poses 
+  // std::ofstream energyFile("energy.txt", std::ofstream::out);
+
+  // for (int idxOfConformer = 0; idxOfConformer < numOfConformations; idxOfConformer++)
+  // {
+  //   std::cout << "idxOfConformer: " << idxOfConformer << std::endl;
+  //   // get coordinates for one conformer
+  //   for(int i = 0; i < nAtom; i++)
+  //   {
+  //     coor[i*3 + 0] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 0];
+  //     coor[i*3 + 1] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 1];
+  //     coor[i*3 + 2] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 2];
+  //   }
+
+  //   // generate all quaternions and ignore some quaternions, which will rotate the ligand
+  //   // to have larger dimension than the grid
+  //   QuaternionUniformSampling(gen, quaternions, numOfTotalQuaternions);
+  //   numOfQuaternionsUsed = FilterQuaternions(coor, nAtom,
+  // 					     numOfTotalQuaternions, quaternions,
+  // 					     xlen, ylen, zlen,
+  // 					     maxNQuaternionsUsed, quaternionsUsed);
+
+  //   delete[] minEnergyIdxX;
+  //   delete[] minEnergyIdxY;
+  //   delete[] minEnergyIdxZ;
+  //   minEnergyIdxX = new int[numOfQuaternionsUsed];
+  //   minEnergyIdxY = new int[numOfQuaternionsUsed];
+  //   minEnergyIdxZ = new int[numOfQuaternionsUsed];
+  //   std::vector <float> minEnergyQuaternionsUsed(numOfQuaternionsUsed);
+  //   for(int i = 0; i < numOfQuaternionsUsed; i++)
+  //   {
+  //     minEnergyQuaternionsUsed[i] = INFINITY;
+  //   }
+
+  //   delete[] coorsUsed;
+  //   delete[] mincoorsUsed;
+  //   delete[] maxcoorsUsed;
+  //   delete[] ligandLengthUsed;
+  //   coorsUsed = new float[numOfQuaternionsUsed*nAtom*3];
+  //   mincoorsUsed = new float[numOfQuaternionsUsed*3];
+  //   maxcoorsUsed = new float[numOfQuaternionsUsed*3];
+  //   ligandLengthUsed = new float[numOfQuaternionsUsed*3];
     
-    for(int i = 0; i < numOfQuaternionsUsed; i++)
-    {
-      for(int j = 0; j < nAtom; j++)
-      {
-    	Rotate(&quaternionsUsed[i*4], &coor[j*3], &coorsUsed[i*nAtom*3+j*3]);
-      }
-    }
+  //   for(int i = 0; i < numOfQuaternionsUsed; i++)
+  //   {
+  //     for(int j = 0; j < nAtom; j++)
+  //     {
+  //   	Rotate(&quaternionsUsed[i*4], &coor[j*3], &coorsUsed[i*nAtom*3+j*3]);
+  //     }
+  //   }
 
-    // calculate minimum coor for each quaternions
-    GetMinCoors(numOfQuaternionsUsed, nAtom, coorsUsed, mincoorsUsed);
+  //   // calculate minimum coor for each quaternions
+  //   GetMinCoors(numOfQuaternionsUsed, nAtom, coorsUsed, mincoorsUsed);
 
-    // calculate maximum coor for each quaternions
-    GetMaxCoors(numOfQuaternionsUsed, nAtom, coorsUsed, maxcoorsUsed);
+  //   // calculate maximum coor for each quaternions
+  //   GetMaxCoors(numOfQuaternionsUsed, nAtom, coorsUsed, maxcoorsUsed);
 
-    // calculate the length for each quaternion
-    for(int i = 0; i < numOfQuaternionsUsed; i++)
-    {
-      ligandLengthUsed[i*3 + 0] = maxcoorsUsed[i*3 + 0] - mincoorsUsed[i*3 + 0];
-      ligandLengthUsed[i*3 + 1] = maxcoorsUsed[i*3 + 1] - mincoorsUsed[i*3 + 1];
-      ligandLengthUsed[i*3 + 2] = maxcoorsUsed[i*3 + 2] - mincoorsUsed[i*3 + 2];
-    }
+  //   // calculate the length for each quaternion
+  //   for(int i = 0; i < numOfQuaternionsUsed; i++)
+  //   {
+  //     ligandLengthUsed[i*3 + 0] = maxcoorsUsed[i*3 + 0] - mincoorsUsed[i*3 + 0];
+  //     ligandLengthUsed[i*3 + 1] = maxcoorsUsed[i*3 + 1] - mincoorsUsed[i*3 + 1];
+  //     ligandLengthUsed[i*3 + 2] = maxcoorsUsed[i*3 + 2] - mincoorsUsed[i*3 + 2];
+  //   }
 
-    // loop over batches of quaternions
-    // num of batches
-    if (numOfQuaternionsUsed % numOfQuaternionsOneBatch == 0)
-    {
-      numOfBatches = numOfQuaternionsUsed / numOfQuaternionsOneBatch;
-    }
-    else
-    {
-      numOfBatches = numOfQuaternionsUsed / numOfQuaternionsOneBatch + 1;
-    }
+  //   // loop over batches of quaternions
+  //   // num of batches
+  //   if (numOfQuaternionsUsed % numOfQuaternionsOneBatch == 0)
+  //   {
+  //     numOfBatches = numOfQuaternionsUsed / numOfQuaternionsOneBatch;
+  //   }
+  //   else
+  //   {
+  //     numOfBatches = numOfQuaternionsUsed / numOfQuaternionsOneBatch + 1;
+  //   }
     
-    for(int idxOfBatch = 0; idxOfBatch < numOfBatches; idxOfBatch++)
-    {
-      std::cout << "idxOfBatch: " << idxOfBatch << std::endl;  
-      // fill ligand grid
-      memset(ligandGridValues, 0, sizeof(float)*numOfQuaternionsOneBatch*numOfGridsUsed*xdim*ydim*zdim);
-      if ((idxOfBatch + 1) * numOfQuaternionsOneBatch > numOfQuaternionsUsed)
-      {
-  	FillLigandGrid(numOfQuaternionsUsed - idxOfBatch * numOfQuaternionsOneBatch,
-  		       nAtom, &coorsUsed[idxOfBatch*numOfQuaternionsOneBatch*nAtom*3], &mincoorsUsed[idxOfBatch*numOfQuaternionsOneBatch*3],
-  		       atomCharges, atomEpsilons,
-  		       numOfVdwGridsUsed, idxOfVdwUsed,
-  		       idxOfAtomVdwRadius,
-  		       xdim, ydim, zdim,
-  		       spacing, ligandGridValues);
-      }
-      else
-      {
-  	FillLigandGrid(numOfQuaternionsOneBatch,
-  		       nAtom, &coorsUsed[idxOfBatch*numOfQuaternionsOneBatch*nAtom*3], &mincoorsUsed[idxOfBatch*numOfQuaternionsOneBatch*3],
-  		       atomCharges, atomEpsilons,
-  		       numOfVdwGridsUsed, idxOfVdwUsed,
-  		       idxOfAtomVdwRadius,
-  		       xdim, ydim, zdim,
-  		       spacing, ligandGridValues);
+  //   for(int idxOfBatch = 0; idxOfBatch < numOfBatches; idxOfBatch++)
+  //   {
+  //     std::cout << "idxOfBatch: " << idxOfBatch << std::endl;  
+  //     // fill ligand grid
+  //     memset(ligandGridValues, 0, sizeof(float)*numOfQuaternionsOneBatch*numOfGridsUsed*xdim*ydim*zdim);
+  //     if ((idxOfBatch + 1) * numOfQuaternionsOneBatch > numOfQuaternionsUsed)
+  //     {
+  // 	FillLigandGrid(numOfQuaternionsUsed - idxOfBatch * numOfQuaternionsOneBatch,
+  // 		       nAtom, &coorsUsed[idxOfBatch*numOfQuaternionsOneBatch*nAtom*3], &mincoorsUsed[idxOfBatch*numOfQuaternionsOneBatch*3],
+  // 		       atomCharges, atomEpsilons,
+  // 		       numOfVdwGridsUsed, idxOfVdwUsed,
+  // 		       idxOfAtomVdwRadius,
+  // 		       xdim, ydim, zdim,
+  // 		       spacing, ligandGridValues);
+  //     }
+  //     else
+  //     {
+  // 	FillLigandGrid(numOfQuaternionsOneBatch,
+  // 		       nAtom, &coorsUsed[idxOfBatch*numOfQuaternionsOneBatch*nAtom*3], &mincoorsUsed[idxOfBatch*numOfQuaternionsOneBatch*3],
+  // 		       atomCharges, atomEpsilons,
+  // 		       numOfVdwGridsUsed, idxOfVdwUsed,
+  // 		       idxOfAtomVdwRadius,
+  // 		       xdim, ydim, zdim,
+  // 		       spacing, ligandGridValues);
 
-      }
+  //     }
       
-      // batch cudaFFT for ligand grid
-      cudaMemcpy(d_ligand_f, ligandGridValues,
-    		 sizeof(cufftReal)*nBatchLigand*idist,
-    		 cudaMemcpyHostToDevice);
-      ligandRes = cufftExecR2C(ligandPlan, d_ligand_f, d_ligand_F);
-      if (ligandRes != CUFFT_SUCCESS)
-      {
-    	std::cout << "ligand grid transform failed!";
-    	return 1;
-      }
+  //     // batch cudaFFT for ligand grid
+  //     cudaMemcpy(d_ligand_f, ligandGridValues,
+  //   		 sizeof(cufftReal)*nBatchLigand*idist,
+  //   		 cudaMemcpyHostToDevice);
+  //     ligandRes = cufftExecR2C(ligandPlan, d_ligand_f, d_ligand_F);
+  //     if (ligandRes != CUFFT_SUCCESS)
+  //     {
+  //   	std::cout << "ligand grid transform failed!";
+  //   	return 1;
+  //     }
 
-      // calcualte energy using reverse FFT
-      ConjMult <<<blocks_ConjMult, threads_ConjMult>>> (d_potential_F, d_ligand_F, odist, numOfGridsUsed);
-      CUDA_CHECK();
+  //     // calcualte energy using reverse FFT
+  //     ConjMult <<<blocks_ConjMult, threads_ConjMult>>> (d_potential_F, d_ligand_F, odist, numOfGridsUsed);
+  //     CUDA_CHECK();
 
-      SumGrids <<<blocks_SumGrids, threads_SumGrids>>> (d_ligand_F, d_ligand_sum_F, numOfGridsUsed, odist, idist);
-      CUDA_CHECK();
+  //     SumGrids <<<blocks_SumGrids, threads_SumGrids>>> (d_ligand_F, d_ligand_sum_F, numOfGridsUsed, odist, idist);
+  //     CUDA_CHECK();
 
-      ligandRRes = cufftExecC2R(ligandRPlan, d_ligand_sum_F, d_ligand_sum_f);
-      if (ligandRRes != CUFFT_SUCCESS)
-      {
-    	std::cout << "ligand grid reverse transform failed!";
-    	return 1;
-      }
+  //     ligandRRes = cufftExecC2R(ligandRPlan, d_ligand_sum_F, d_ligand_sum_f);
+  //     if (ligandRRes != CUFFT_SUCCESS)
+  //     {
+  //   	std::cout << "ligand grid reverse transform failed!";
+  //   	return 1;
+  //     }
       
-      // copy energy back
-      cudaMemcpy(energy, d_ligand_sum_f, sizeof(float)*numOfQuaternionsOneBatch*idist,
-    		 cudaMemcpyDeviceToHost);
+  //     // copy energy back
+  //     cudaMemcpy(energy, d_ligand_sum_f, sizeof(float)*numOfQuaternionsOneBatch*idist,
+  //   		 cudaMemcpyDeviceToHost);
 
-      // record the minimum energy pose in terms of quaternions, x, y and z
-      for(int q = 0; q < numOfQuaternionsOneBatch; q++)
-      {
-    	int idxOfQuaternions = idxOfBatch * numOfQuaternionsOneBatch + q;
-  	if(idxOfQuaternions < numOfQuaternionsUsed)
-  	{
-  	  for(int i = 0; i < (xdim-int(ligandLengthUsed[idxOfQuaternions*3+0]/spacing)-2); i++)
-  	  {
-  	    for(int j = 0; j < (ydim-int(ligandLengthUsed[idxOfQuaternions*3+1]/spacing)-2); j++)
-  	    {
-  	      for(int k = 0; k < (ydim-int(ligandLengthUsed[idxOfQuaternions*3+2]/spacing)-2); k++)
-  	      {
-  		int tmp = q*idist + (i*ydim + j)*zdim + k;
-    		if(energy[tmp] / sqrt(idist) < minEnergyQuaternionsUsed[idxOfQuaternions])
-    		{
-    		  minEnergyQuaternionsUsed[idxOfQuaternions] = energy[tmp] / sqrt(idist);
-    		  minEnergyIdxX[idxOfQuaternions] = i;
-    		  minEnergyIdxY[idxOfQuaternions] = j;
-    		  minEnergyIdxZ[idxOfQuaternions] = k;
-    		}
-    	      }
-    	    }
-    	  }
-    	}
-      }      
-    } // finish all batches of quaternions for one conformer
+  //     // record the minimum energy pose in terms of quaternions, x, y and z
+  //     for(int q = 0; q < numOfQuaternionsOneBatch; q++)
+  //     {
+  //   	int idxOfQuaternions = idxOfBatch * numOfQuaternionsOneBatch + q;
+  // 	if(idxOfQuaternions < numOfQuaternionsUsed)
+  // 	{
+  // 	  for(int i = 0; i < (xdim-int(ligandLengthUsed[idxOfQuaternions*3+0]/spacing)-2); i++)
+  // 	  {
+  // 	    for(int j = 0; j < (ydim-int(ligandLengthUsed[idxOfQuaternions*3+1]/spacing)-2); j++)
+  // 	    {
+  // 	      for(int k = 0; k < (ydim-int(ligandLengthUsed[idxOfQuaternions*3+2]/spacing)-2); k++)
+  // 	      {
+  // 		int tmp = q*idist + (i*ydim + j)*zdim + k;
+  //   		if(energy[tmp] / sqrt(idist) < minEnergyQuaternionsUsed[idxOfQuaternions])
+  //   		{
+  //   		  minEnergyQuaternionsUsed[idxOfQuaternions] = energy[tmp] / sqrt(idist);
+  //   		  minEnergyIdxX[idxOfQuaternions] = i;
+  //   		  minEnergyIdxY[idxOfQuaternions] = j;
+  //   		  minEnergyIdxZ[idxOfQuaternions] = k;
+  //   		}
+  //   	      }
+  //   	    }
+  //   	  }
+  //   	}
+  //     }      
+  //   } // finish all batches of quaternions for one conformer
     
-    // calculate the coordinates corresponding to lowest nLowest energy orientation
-    std::vector<size_t> idxOfSortedQuater;
-    idxOfSortedQuater = sort_index<float>(minEnergyQuaternionsUsed);
-    int nLowest = atoi(argv[6]);
-    for(int iLowest = 0; iLowest < nLowest && iLowest < numOfQuaternionsUsed; iLowest++)
-    {
-      int idxQ = idxOfSortedQuater[iLowest];
-      double minEnergyCoorDouble[nAtom*3];
-      for(int i = 0; i < nAtom; i++)
-      {
-    	minEnergyCoorDouble[i*3 + 0] = (double) coorsUsed[idxQ*nAtom*3 + i*3 + 0];
-    	minEnergyCoorDouble[i*3 + 1] = (double) coorsUsed[idxQ*nAtom*3 + i*3 + 1];
-    	minEnergyCoorDouble[i*3 + 2] = (double) coorsUsed[idxQ*nAtom*3 + i*3 + 2];
-      }
+  //   // calculate the coordinates corresponding to lowest nLowest energy orientation
+  //   std::vector<size_t> idxOfSortedQuater;
+  //   idxOfSortedQuater = sort_index<float>(minEnergyQuaternionsUsed);
+  //   for(int iLowest = 0; iLowest < nLowest && iLowest < numOfQuaternionsUsed; iLowest++)
+  //   {
+  //     int idxQ = idxOfSortedQuater[iLowest];
+  //     double minEnergyCoorDouble[nAtom*3];
+  //     for(int i = 0; i < nAtom; i++)
+  //     {
+  //   	minEnergyCoorDouble[i*3 + 0] = (double) coorsUsed[idxQ*nAtom*3 + i*3 + 0];
+  //   	minEnergyCoorDouble[i*3 + 1] = (double) coorsUsed[idxQ*nAtom*3 + i*3 + 1];
+  //   	minEnergyCoorDouble[i*3 + 2] = (double) coorsUsed[idxQ*nAtom*3 + i*3 + 2];
+  //     }
     
-      for(int i = 0; i < nAtom; i++)
-      {
-    	minEnergyCoorDouble[i*3 + 0] += (gridMinX - mincoorsUsed[idxQ*3 + 0] + minEnergyIdxX[idxQ] * spacing);
-    	minEnergyCoorDouble[i*3 + 1] += (gridMinY - mincoorsUsed[idxQ*3 + 1] + minEnergyIdxY[idxQ] * spacing);
-    	minEnergyCoorDouble[i*3 + 2] += (gridMinZ - mincoorsUsed[idxQ*3 + 2] + minEnergyIdxZ[idxQ] * spacing);
-      }
+  //     for(int i = 0; i < nAtom; i++)
+  //     {
+  //   	minEnergyCoorDouble[i*3 + 0] += (gridMinX - mincoorsUsed[idxQ*3 + 0] + minEnergyIdxX[idxQ] * spacing);
+  //   	minEnergyCoorDouble[i*3 + 1] += (gridMinY - mincoorsUsed[idxQ*3 + 1] + minEnergyIdxY[idxQ] * spacing);
+  //   	minEnergyCoorDouble[i*3 + 2] += (gridMinZ - mincoorsUsed[idxQ*3 + 2] + minEnergyIdxZ[idxQ] * spacing);
+  //     }
 
-      for(int i = 0; i < sys->getNumParticles(); i++)
-      {
-      	position[i] = OpenMM::Vec3(minEnergyCoorDouble[i*3+0]*OpenMM::NmPerAngstrom,
-      				   minEnergyCoorDouble[i*3+1]*OpenMM::NmPerAngstrom,
-      				   minEnergyCoorDouble[i*3+2]*OpenMM::NmPerAngstrom);
-      }
+  //     for(int i = 0; i < sys->getNumParticles(); i++)
+  //     {
+  //     	position[i] = OpenMM::Vec3(minEnergyCoorDouble[i*3+0]*OpenMM::NmPerAngstrom,
+  //     				   minEnergyCoorDouble[i*3+1]*OpenMM::NmPerAngstrom,
+  //     				   minEnergyCoorDouble[i*3+2]*OpenMM::NmPerAngstrom);
+  //     }
       
-      context.setPositions(position);
-      minimizer.minimize(context, 10, 500);
-      // state = context.getState(OpenMM::State::Energy, false, 1<<10 | 1<<11);
-      state = context.getState(OpenMM::State::Energy);
+  //     context.setPositions(position);
+  //     minimizer.minimize(context, 1, 1000);
+  //     // state = context.getState(OpenMM::State::Energy, false, 1<<10 | 1<<11);
+  //     state = context.getState(OpenMM::State::Energy);
+  //     for(int i = 0; i < sys->getNumParticles(); i++)
+  //     {
+  // 	minEnergyCoorDouble[i*3 + 0] = position[i][0] * OpenMM::AngstromsPerNm;
+  // 	minEnergyCoorDouble[i*3 + 1] = position[i][1] * OpenMM::AngstromsPerNm;
+  // 	minEnergyCoorDouble[i*3 + 2] = position[i][2] * OpenMM::AngstromsPerNm;
+  //     }
 
-      for(int i = 0; i < sys->getNumParticles(); i++)
-      {
-	minEnergyCoorDouble[i*3 + 0] = position[i][0] * OpenMM::AngstromsPerNm;
-	minEnergyCoorDouble[i*3 + 1] = position[i][1] * OpenMM::AngstromsPerNm;
-	minEnergyCoorDouble[i*3 + 2] = position[i][2] * OpenMM::AngstromsPerNm;
-      }
+  //     finalPoses[idxOfConformer * nLowest + iLowest].SetCoordinates(minEnergyCoorDouble);
+  //     energyOfFinalPoses[idxOfConformer * nLowest + iLowest] = state.getPotentialEnergy() * OpenMM::KcalPerKJ;
       
-      mol.SetCoordinates(minEnergyCoorDouble);
-      fileName = "conformer_";
-      fileName += std::to_string(idxOfConformer);
-      fileName += "_";
-      fileName += std::to_string(iLowest);
-      fileName += ".pdb";
-      conv.WriteFile(&mol, fileName);
-      std::cout << "Conformer: " << idxOfConformer
-  		<< ", IdxQ: " << idxQ
-    		<< ", IdxX: " << minEnergyIdxX[idxQ]
-    		<< ", IdxY: " << minEnergyIdxY[idxQ]
-  		<< ", IdxZ: " << minEnergyIdxZ[idxQ]
-    		<< ", MinEnergyTranRota:" << minEnergyQuaternionsUsed[idxQ]
-  		<< ", Potential Energy: " << state.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
-    }
-  }
-    return 0;
+  //     // mol.SetCoordinates(minEnergyCoorDouble);
+  //     fileName = "conformer_";
+  //     fileName += std::to_string(idxOfConformer);
+  //     fileName += "_";
+  //     fileName += std::to_string(iLowest);
+  //     fileName += ".pdb";
+  //     // conv.WriteFile(&mol, fileName);
+  //     conv.WriteFile(&finalPoses[idxOfConformer*nLowest+iLowest], fileName);
+  //     energyFile << fileName << ","
+  //     		 << idxOfConformer << ","
+  //     		 << iLowest << ","
+  //     		 << state.getPotentialEnergy() * OpenMM::KcalPerKJ
+  //     		 << std::endl;
+  //     std::cout << "Conformer: " << idxOfConformer
+  //     		<< ", IdxQ: " << idxQ
+  //     		<< ", IdxX: " << minEnergyIdxX[idxQ]
+  //     		<< ", IdxY: " << minEnergyIdxY[idxQ]
+  //     		<< ", IdxZ: " << minEnergyIdxZ[idxQ]
+  //     		<< ", MinEnergyTranRota:" << minEnergyQuaternionsUsed[idxQ]
+  //     		<< ", Potential Energy: " << state.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
+  //   }
+  // }
+  // energyFile.close();
+  return 0;
 }

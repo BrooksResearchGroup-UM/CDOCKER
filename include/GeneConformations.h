@@ -20,7 +20,7 @@ std::vector<size_t> sort_index(const std::vector<T> &v)
 };
 
 // return num of conformer centers
-int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, double* &coorsConformers);
+int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxNumOfConformations, double* &coorsConformers);
 
 #endif /* _GENECONFORMATIONS_H */
 
