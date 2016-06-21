@@ -59,7 +59,24 @@ int main(int argc, char** argv)
   int numOfRotaSample = atoi(argv[7]);
   int nLowest = atoi(argv[8]);
   int mode = atoi(argv[9]);
-  
+  if (mode == 0)
+  {
+    std::cout << "Model 0: only search for translation" << std::endl;
+  }
+  else if (mode == 1)
+  {
+    std::cout << "Model 1: search for translation and rotation" << std::endl;
+  }
+  else if (mode == 2)
+  {
+    std::cout << "Model 2: search for translation, rotation and conformation" << std::endl;
+  }
+  else
+  {
+    std::cout << "Error: The value of model has to be 0, 1 or 2" << std::endl;
+    return 1;
+  }
+
   // read molecule
   OpenBabel::OBMol mol;
   OpenBabel::OBConversion conv(&std::cin, &std::cout);
@@ -155,7 +172,8 @@ int main(int argc, char** argv)
   			      );
 
   // build OpenMM context
-  OpenMM::VerletIntegrator integrator(0.001);
+  OpenMM::LangevinIntegrator integrator(300, 10, 0.0015);
+  // OpenMM::VerletIntegrator integrator(0.001);
   OpenMM::LocalEnergyMinimizer minimizer;
   
   OpenMM::Context context(*sys, integrator);
@@ -500,7 +518,14 @@ int main(int argc, char** argv)
       context.setPositions(position);
       if (mode == 2)
       {
-	minimizer.minimize(context, 0.001, 10000);
+	// simulated annealing
+	for(int i = 700; i >= 100; i-=30)
+	{
+	  integrator.setTemperature(i);
+	  integrator.step(500);
+	}
+	// minimize at the end
+	minimizer.minimize(context, 0.001, 100);
       }
       // state = context.getState(OpenMM::State::Energy, false, 1<<10 | 1<<11);
       state = context.getState(OpenMM::State::Energy);

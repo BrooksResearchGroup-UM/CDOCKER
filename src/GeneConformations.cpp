@@ -27,7 +27,7 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxNumOfCo
 
   //// When the ligand has rotatable bonds
   ////  generate random conformers  
-  int N = 2000;  // num of random conformers from which centers are selected
+  int N = 1000;  // num of random conformers from which centers are selected
 
   OpenBabel::OBMol mols[N];
   for(int i = 0; i < N; i++)
@@ -69,7 +69,7 @@ int GeneConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxNumOfCo
 				 mols[k].GetCoordinates()[i*3+2]*OpenMM::NmPerAngstrom);
     }
     context.setPositions(position);
-    minimizer.minimize(context, 10, 30);
+    minimizer.minimize(context, 0.001, 100);
     state = context.getState(OpenMM::State::Positions | OpenMM::State::Energy);
     energy[k] = state.getPotentialEnergy()*OpenMM::KcalPerKJ;
     position = state.getPositions();
