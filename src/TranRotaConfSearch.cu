@@ -21,6 +21,7 @@
 #include "GetIdxOfAtomsForVdwRadius.h"
 #include "FillLigandGrid.h"
 #include "GeneConformations.h"
+#include "GeneRandomConformations.h"
 #include "kernel.h"
 #include "QuaternionUniformSampling.h"
 #include "AddGridForcesToOpenMMSystem.h"
@@ -104,7 +105,8 @@ int main(int argc, char** argv)
   }
   if (mode == 2)
   {
-    numOfConformations = GeneConformations(mol, sys, maxNumOfConformations, coorsConformations);
+    //numOfConformations = GeneConformations(mol, sys, maxNumOfConformations, coorsConformations);
+    numOfConformations = GeneRandomConformations(mol, sys, maxNumOfConformations, coorsConformations);
   }
   std::cout << "num of conformations: " << numOfConformations << std::endl;
   
