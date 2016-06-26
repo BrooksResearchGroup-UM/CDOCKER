@@ -3,7 +3,7 @@
 #include <string>
 #include "ReadCrd.h"
 
-void ReadCrd(int nAtoms, float *&coor, char *fileName)
+void ReadCrd(int nAtoms, float *&coor, std::string fileName)
 {
   std::ifstream coorFile;
   coorFile.open(fileName, std::ifstream::in);

@@ -21,6 +21,7 @@
 #include "GetIdxOfAtomsForVdwRadius.h"
 #include "FillLigandGrid.h"
 #include "GeneConformations.h"
+#include "GeneRandomConformations.h"
 #include "kernel.h"
 #include "QuaternionUniformSampling.h"
 #include "AddGridForcesToOpenMMSystem.h"
@@ -36,13 +37,21 @@
 
 //// main function ////
 // Usage:
-// TranRotaConfSearch .mol2 sys.xml grid.txt maxNumOfConf numOfRotaPerConf maxNumOfRotaPerConf numOfRotaSample nLowest mode
-// maxNumOfConf: maximum num of random conformations
-// numOfRotatPerConf: num of directions for each coforamtion
-// mode:
-// - 0: only search translation
-// - 1: only search translation and rotation. The conforamtion is given in mol2 file
-// - 2: search translation, rotation, and conformation
+// TranRotaConfSearch ligand.mol2 ligand.xml ligand-protein.xml ligand-protein.crd grid.txt maxNumOfConf numOfRotaPerConf maxNumOfRotaPerConf numOfRotaSample nLowest mode
+// Arguments:
+// - ligand.mol2
+// - ligand.xml: serialized xml file for ligand
+// - ligand-protein.xml: serizalied xml file for both ligand and protein. The order of ligand of protein matters and the ligand should be followed by protein.
+// - ligand-protein.crd: charmm crd file for both ligand and protein. The order of ligand of protein matters and the ligand should be followed by protein.
+// - grid.txt: txt file for grid potential generated from protein
+// - maxNumOfConf: maximum num of random conformations
+// - numOfRotatPerConf: num of directions for each conformation
+// - maxNumOfRotaPerConf: maximum num of direactions for each conformations
+// - numOfRotaSample: num of directions random sampled, from which the valid directions are selected.
+// - mode:
+//   - 0: only search translation
+//   - 1: only search translation and rotation. The conforamtion is given in mol2 file
+//   - 2: search translation, rotation, and conformation
 
 int main(int argc, char** argv)
 {
@@ -51,14 +60,16 @@ int main(int argc, char** argv)
 
   // parse the command line parameters
   std::string mol2FileName(argv[1]);
-  std::string sysFileName(argv[2]);
-  std::string gridFileName(argv[3]);
-  int maxNumOfConformations = atoi(argv[4]);
-  int numOfRotaPerConformation = atoi(argv[5]);
-  int maxNumOfRotaPerConf = atoi(argv[6]);
-  int numOfRotaSample = atoi(argv[7]);
-  int nLowest = atoi(argv[8]);
-  int mode = atoi(argv[9]);
+  std::string ligandSysFileName(argv[2]);
+  std::string bothSysFileName(argv[3]);
+  std::string bothCrdFileName(argv[4]);
+  std::string gridFileName(argv[5]);
+  int maxNumOfConformations = atoi(argv[6]);
+  int numOfRotaPerConformation = atoi(argv[7]);
+  int maxNumOfRotaPerConf = atoi(argv[8]);
+  int numOfRotaSample = atoi(argv[9]);
+  int nLowest = atoi(argv[10]);
+  int mode = atoi(argv[11]);
   if (mode == 0)
   {
     std::cout << "Model 0: only search for translation" << std::endl;
@@ -77,25 +88,40 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  // read molecule
-  OpenBabel::OBMol mol;
+  // read ligand molecule
+  OpenBabel::OBMol ligandOBMol;
   OpenBabel::OBConversion conv(&std::cin, &std::cout);
   conv.SetInFormat("mol2");
   conv.SetOutFormat("pdb");
-  conv.ReadFile(&mol, mol2FileName);
-  int nAtom = mol.NumAtoms();
+  conv.ReadFile(&ligandOBMol, mol2FileName);
+  int nAtom = ligandOBMol.NumAtoms();
   
-  // read system
-  std::ifstream sysFile;
-  sysFile.open(sysFileName, std::ifstream::in);
-  if (sysFile.fail())
+  // read ligand system
+  std::ifstream ligandSysFile;
+  ligandSysFile.open(ligandSysFileName, std::ifstream::in);
+  if (ligandSysFile.fail())
   {
-    std::cout << "Open system file failed: " << sysFileName << std::endl;
+    std::cout << "Open system file failed: " << ligandSysFileName << std::endl;
     return 1;
   }
-  OpenMM::System *sys = new OpenMM::System();
-  sys = OpenMM::XmlSerializer::deserialize<OpenMM::System>(sysFile);
+  OpenMM::System *ligandOmmSys = new OpenMM::System();
+  ligandOmmSys = OpenMM::XmlSerializer::deserialize<OpenMM::System>(ligandSysFile);
 
+  // read ligand and protein system
+  std::ifstream bothSysFile;
+  bothSysFile.open(bothSysFileName, std::ifstream::in);
+  if (bothSysFile.fail())
+  {
+    std::cout << "Open system file failed: " << bothSysFileName << std::endl;
+    return 1;
+  }
+  OpenMM::System *bothOmmSys = new OpenMM::System();
+  bothOmmSys = OpenMM::XmlSerializer::deserialize<OpenMM::System>(bothSysFile);
+
+  // read coordinates for both ligand and protein
+  float *bothCoor = 0;
+  ReadCrd(bothOmmSys->getNumParticles(), bothCoor, bothCrdFileName);
+  
   // read grid potential
   int numOfGrids, xdim, ydim, zdim;
   float midx, midy, midz;
@@ -110,18 +136,19 @@ int main(int argc, char** argv)
   	    gridFileName);
   int numOfVdwGrids = numOfGrids - 1;
 
-  // random clustered conformations
+  // generate conformations
   double *coorsConformations;
   int numOfConformations;
   if (mode == 0 || mode == 1) // use one conformatoin in mol file
   {
     coorsConformations = new double [nAtom * 3];
-    memcpy(coorsConformations, mol.GetCoordinates(), sizeof(double) * nAtom * 3);
+    memcpy(coorsConformations, ligandOBMol.GetCoordinates(), sizeof(double) * nAtom * 3);
     numOfConformations = 1;
   }
   if (mode == 2)
   {
-    numOfConformations = GeneConformations(mol, sys, maxNumOfConformations, coorsConformations);
+    //numOfConformations = GeneConformations(ligandOBMol, ligandOmmSys, maxNumOfConformations, coorsConformations);
+    numOfConformations = GeneRandomConformations(ligandOBMol, ligandOmmSys, maxNumOfConformations, coorsConformations);
   }
   std::cout << "num of conformations: " << numOfConformations << std::endl;
   
@@ -129,7 +156,7 @@ int main(int argc, char** argv)
   float atomCharges[nAtom];
   float atomEpsilons[nAtom];
   float atomRadii[nAtom];
-  GetNonbondedParameters(sys, atomCharges, atomEpsilons, atomRadii);
+  GetNonbondedParameters(ligandOmmSys, atomCharges, atomEpsilons, atomRadii);
 
   // get index of atoms for each vdw radius
   int numOfVdwGridsUsed;
@@ -154,7 +181,7 @@ int main(int argc, char** argv)
   	 &gridValues[numOfVdwGrids*xdim*ydim*zdim],
   	 sizeof(float)*xdim*ydim*zdim);
 
-  // add grid forces to OpenMM System via cumstomized forces
+  // add grid forces to ligand OpenMM System via cumstomized forces
   double gridMinX = midx - xlen / 2;
   double gridMinY = midy - ylen / 2;
   double gridMinZ = midz - zlen / 2;
@@ -168,20 +195,34 @@ int main(int argc, char** argv)
   			      idxOfVdwUsed,
   			      idxOfAtomVdwRadius,
   			      &usedGridValues[numOfVdwGridsUsed*xdim*ydim*zdim],
-  			      sys
+  			      ligandOmmSys
   			      );
 
-  // build OpenMM context
-  OpenMM::LangevinIntegrator integrator(300, 10, 0.0015);
-  // OpenMM::VerletIntegrator integrator(0.001);
-  OpenMM::LocalEnergyMinimizer minimizer;
+  // build OpenMM ligand grid context
+  OpenMM::VerletIntegrator ligandGridIntegrator(0.001);
+  OpenMM::LocalEnergyMinimizer ligandGridMinimizer;
+  OpenMM::Context ligandGridContext(*ligandOmmSys, ligandGridIntegrator);
+  printf( "REMARK  Build ligandGridContext Using OpenMM platform %s\n",
+  	  ligandGridContext.getPlatform().getName().c_str() );
+  OpenMM::State ligandGridState;
+  std::vector<OpenMM::Vec3> ligandGridPosition(ligandOmmSys->getNumParticles());
+
+  // build OpenMM ligand protein context
+  OpenMM::LangevinIntegrator ligandProteinIntegrator(300, 5, 0.001);
+  OpenMM::LocalEnergyMinimizer ligandProteinMinimizer;
+  OpenMM::Context ligandProteinContext(*bothOmmSys, ligandProteinIntegrator);
+  printf( "REMARK  Build ligandProteinContext Using OpenMM platform %s\n",
+  	  ligandProteinContext.getPlatform().getName().c_str() );
+  OpenMM::State ligandProteinState;
+  std::vector<OpenMM::Vec3> ligandProteinPosition(bothOmmSys->getNumParticles());
+  for(int i = 0; i < bothOmmSys->getNumParticles(); i++)
+  {
+    ligandProteinPosition[i] = OpenMM::Vec3(bothCoor[i*3+0]*OpenMM::NmPerAngstrom,
+					    bothCoor[i*3+1]*OpenMM::NmPerAngstrom,
+					    bothCoor[i*3+2]*OpenMM::NmPerAngstrom);
+  }
   
-  OpenMM::Context context(*sys, integrator);
-  printf( "REMARK  Add custom force Using OpenMM platform %s\n",
-  	  context.getPlatform().getName().c_str() );
-  OpenMM::State state;
-  std::vector<OpenMM::Vec3> position(sys->getNumParticles());
-  
+  //// cufft transform for grid potential //// 
   // batch cudaFFT for potential grids
   int n[3];
   n[0] = xdim;
@@ -216,23 +257,25 @@ int main(int argc, char** argv)
   					   CUFFT_R2C, nBatchPotential);
   if (potentialRes != CUFFT_SUCCESS)
   {
-    std::cout << "plan creat failed!";
+    std::cout << "grid potential plan creat failed!";
     return 1;
   }
   potentialRes = cufftExecR2C(potentialPlan, d_potential_f, d_potential_F);
   if (potentialRes != CUFFT_SUCCESS)
   {
-    std::cout << "transform failed!";
+    std::cout << "grid potential cufft transform failed!";
     return 1;
   }
+  //// 
   
   // generate uniform quaternions and setup data structure for all quaternions
   float* quaternions = 0;
   std::random_device rd;
   std::mt19937_64 gen(rd());
-  
+
+  //// set up one one batch of cufft transform for ligand grid ////
   // for one batch of quaternions
-  int numOfQuaternionsOneBatch = 80;
+  int numOfQuaternionsOneBatch = 50;
   int numOfBatches = 0;
 
   // ligand grid for one batch
@@ -252,7 +295,7 @@ int main(int argc, char** argv)
   					CUFFT_R2C, nBatchLigand);
   if (ligandRes != CUFFT_SUCCESS)
   {
-    std::cout << "plan creat failed!";
+    std::cout << "ligand plan creat failed!";
     return 1;
   }
 
@@ -274,17 +317,18 @@ int main(int argc, char** argv)
   					 CUFFT_C2R, numOfQuaternionsOneBatch);
   if (ligandRRes != CUFFT_SUCCESS)
   {
-    std::cout << "plan creat failed!";
+    std::cout << "ligand reverse plan creat failed!";
     return 1;
   }
-
+  ////
+  
   // host energy 
   float* energy;
   energy = new float[numOfQuaternionsOneBatch*idist];
 
   // coordinates for one conformation
-  float* coor;
-  coor = new float[nAtom*3];
+  float* conformerCoor;
+  conformerCoor = new float[nAtom*3];
   
   // ignore quaterions, whose end structures' dimenstion is larger than the grids
   size_t maxNQuaternionsUsed = maxNumOfConformations * numOfRotaPerConformation / numOfConformations + 1;
@@ -311,26 +355,29 @@ int main(int argc, char** argv)
   
   for(int i = 0; i < numOfConformations * nLowest; i++)
   {
-    finalPoses[i] = mol;
+    finalPoses[i] = ligandOBMol;
   }
   
   // file for saving energy values of end poses 
   std::ofstream energyFile("energy.txt", std::ofstream::out);
 
+  ////////////////////////
+  //// start searching ///
+  ////////////////////////
   for (int idxOfConformer = 0; idxOfConformer < numOfConformations; idxOfConformer++)
   {
     std::cout << "idxOfConformer: " << idxOfConformer << std::endl;
     // get coordinates for one conformer
     for(int i = 0; i < nAtom; i++)
     {
-      coor[i*3 + 0] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 0];
-      coor[i*3 + 1] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 1];
-      coor[i*3 + 2] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 2];
+      conformerCoor[i*3 + 0] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 0];
+      conformerCoor[i*3 + 1] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 1];
+      conformerCoor[i*3 + 2] = (float) coorsConformations[(idxOfConformer*nAtom + i)*3 + 2];
     }
 
     // generate all quaternions and ignore some quaternions, which will rotate the ligand
     // to have larger dimension than the grid
-    if (mode == 0)
+    if (mode == 0) // one search traslation, so make all quaterions unity.
     {
       quaternions = new float[numOfRotaSample * 4]; 
       for(int i = 0; i < numOfRotaSample; i++)
@@ -346,7 +393,7 @@ int main(int argc, char** argv)
       QuaternionUniformSampling(gen, quaternions, numOfRotaSample);
     }
     
-    numOfQuaternionsUsed = FilterQuaternions(coor, nAtom,
+    numOfQuaternionsUsed = FilterQuaternions(conformerCoor, nAtom,
   					     numOfRotaSample, quaternions,
   					     xlen, ylen, zlen,
   					     maxNQuaternionsUsed, quaternionsUsed);
@@ -376,7 +423,7 @@ int main(int argc, char** argv)
     {
       for(int j = 0; j < nAtom; j++)
       {
-    	Rotate(&quaternionsUsed[i*4], &coor[j*3], &coorsUsed[i*nAtom*3+j*3]);
+    	Rotate(&quaternionsUsed[i*4], &conformerCoor[j*3], &coorsUsed[i*nAtom*3+j*3]);
       }
     }
     
@@ -508,50 +555,63 @@ int main(int argc, char** argv)
     	minEnergyCoorDouble[i*3 + 2] += (gridMinZ - mincoorsUsed[idxQ*3 + 2] + minEnergyIdxZ[idxQ] * spacing);
       }
 
-      for(int i = 0; i < sys->getNumParticles(); i++)
+      // minimize with presence of fixed protein
+      for(int i = 0; i < ligandOmmSys->getNumParticles(); i++)
       {
-      	position[i] = OpenMM::Vec3(minEnergyCoorDouble[i*3+0]*OpenMM::NmPerAngstrom,
+	ligandProteinPosition[i] = OpenMM::Vec3(minEnergyCoorDouble[i*3+0]*OpenMM::NmPerAngstrom,
       				   minEnergyCoorDouble[i*3+1]*OpenMM::NmPerAngstrom,
       				   minEnergyCoorDouble[i*3+2]*OpenMM::NmPerAngstrom);
       }
-      
-      context.setPositions(position);
+      ligandProteinContext.setPositions(ligandProteinPosition);
       if (mode == 2)
       {
-	// simulated annealing
-	for(int i = 700; i >= 100; i-=30)
-	{
-	  integrator.setTemperature(i);
-	  integrator.step(500);
-	}
-	// minimize at the end
-	minimizer.minimize(context, 0.001, 100);
+      	ligandProteinMinimizer.minimize(ligandProteinContext, 0.001, 1000);
       }
-      // state = context.getState(OpenMM::State::Energy, false, 1<<10 | 1<<11);
-      state = context.getState(OpenMM::State::Energy);
-      for(int i = 0; i < sys->getNumParticles(); i++)
+      
+      ligandProteinState = ligandProteinContext.getState(OpenMM::State::Energy);
+      
+      for(int i = 0; i < ligandOmmSys->getNumParticles(); i++)
       {
-  	minEnergyCoorDouble[i*3 + 0] = position[i][0] * OpenMM::AngstromsPerNm;
-  	minEnergyCoorDouble[i*3 + 1] = position[i][1] * OpenMM::AngstromsPerNm;
-  	minEnergyCoorDouble[i*3 + 2] = position[i][2] * OpenMM::AngstromsPerNm;
-      }
+  	minEnergyCoorDouble[i*3 + 0] = ligandProteinPosition[i][0] * OpenMM::AngstromsPerNm;
+  	minEnergyCoorDouble[i*3 + 1] = ligandProteinPosition[i][1] * OpenMM::AngstromsPerNm;
+  	minEnergyCoorDouble[i*3 + 2] = ligandProteinPosition[i][2] * OpenMM::AngstromsPerNm;
+      }      
+      energyOfFinalPoses[idxOfConformer * nLowest + iLowest] = ligandProteinState.getPotentialEnergy() * OpenMM::KcalPerKJ;
+
+      //// minimize with presence of only grid
+      // for(int i = 0; i < ligandOmmSys->getNumParticles(); i++)
+      // {
+      // 	ligandGridPosition[i] = OpenMM::Vec3(minEnergyCoorDouble[i*3+0]*OpenMM::NmPerAngstrom,
+      // 				   minEnergyCoorDouble[i*3+1]*OpenMM::NmPerAngstrom,
+      // 				   minEnergyCoorDouble[i*3+2]*OpenMM::NmPerAngstrom);
+      // }      
+      // ligandGridContext.setPositions(ligandGridPosition);
+      // if (mode == 2)
+      // {
+      // 	ligandGridMinimizer.minimize(ligandGridContext, 0.001, 10000);
+      // }
+      // ligandGridState = ligandGridContext.getState(OpenMM::State::Energy, false, 1<<10 | 1<<11);
+      // ligandGridState = ligandGridContext.getState(OpenMM::State::Energy);
+      // for(int i = 0; i < ligandOmmSys->getNumParticles(); i++)
+      // {
+      // 	minEnergyCoorDouble[i*3 + 0] = ligandGridPosition[i][0] * OpenMM::AngstromsPerNm;
+      // 	minEnergyCoorDouble[i*3 + 1] = ligandGridPosition[i][1] * OpenMM::AngstromsPerNm;
+      // 	minEnergyCoorDouble[i*3 + 2] = ligandGridPosition[i][2] * OpenMM::AngstromsPerNm;
+      // }
+      // energyOfFinalPoses[idxOfConformer * nLowest + iLowest] = ligandGridState.getPotentialEnergy() * OpenMM::KcalPerKJ;
 
       finalPoses[idxOfConformer * nLowest + iLowest].SetCoordinates(minEnergyCoorDouble);
-      energyOfFinalPoses[idxOfConformer * nLowest + iLowest] = state.getPotentialEnergy() * OpenMM::KcalPerKJ;
-      
-      // mol.SetCoordinates(minEnergyCoorDouble);
       std::string fileName;
       fileName = "conformer_";
       fileName += std::to_string(idxOfConformer);
       fileName += "_";
       fileName += std::to_string(iLowest);
       fileName += ".pdb";
-      // conv.WriteFile(&mol, fileName);
       conv.WriteFile(&finalPoses[idxOfConformer*nLowest+iLowest], fileName);
       energyFile << fileName << ","
       		 << idxOfConformer << ","
       		 << iLowest << ","
-      		 << state.getPotentialEnergy() * OpenMM::KcalPerKJ
+      		 << ligandProteinState.getPotentialEnergy() * OpenMM::KcalPerKJ
       		 << std::endl;
       std::cout << "Conformer: " << idxOfConformer
       		<< ", IdxQ: " << idxQ
@@ -559,7 +619,7 @@ int main(int argc, char** argv)
       		<< ", IdxY: " << minEnergyIdxY[idxQ]
       		<< ", IdxZ: " << minEnergyIdxZ[idxQ]
       		<< ", MinEnergyTranRota:" << minEnergyQuaternionsUsed[idxQ]
-      		<< ", Potential Energy: " << state.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
+      		<< ", Potential Energy: " << ligandProteinState.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
     }
   }
   energyFile.close();

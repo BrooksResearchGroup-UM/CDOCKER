@@ -4,7 +4,9 @@
 #ifndef _READCRD_H
 #define _READCRD_H 1
 
-void ReadCrd(int nAtom, float *&coor, char *fileName);
+#include <string>
+
+void ReadCrd(int nAtom, float *&coor, std::string fileName);
 
 #endif /* _READCRD_H */
 
