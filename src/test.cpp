@@ -1,11 +1,27 @@
 #include <iostream>
 #include <fstream>
 
+#include <openbabel/mol.h>
+#include <openbabel/obconversion.h>
 #include "OpenMM.h"
 #include "ReadCrd.h"
+#include "AddCustomNonbondedForceToOpenMMSystem.h"
+#include "CalcRMSD.h"
 
 int main(int argc, char** argv)
 {
+  OpenMM::Platform::loadPluginsFromDirectory(
+  					     "/home/xqding/apps/openmmDev/lib/plugins");
+
+  // read ligand molecule
+  OpenBabel::OBMol ligandOBMol;
+  OpenBabel::OBConversion conv(&std::cin, &std::cout);
+  conv.SetInFormat("mol2");
+  conv.SetOutFormat("pdb");
+  conv.ReadFile(&ligandOBMol, "1G9V.lig.am1bcc.mol2");
+  int nAtom = ligandOBMol.NumAtoms();
+
+  // read openmm system
   std::ifstream sysFile;
   sysFile.open("./ligand-protein.xml", std::ifstream::in);
   OpenMM::System *bothOmmSys = new OpenMM::System();
@@ -18,10 +34,10 @@ int main(int argc, char** argv)
   std::cout << bothOmmSys->getNumParticles() << std::endl;
 
   // build OpenMM ligand protein context
+  AddCustomNonbondedForceToOpenMMSystem(bothOmmSys);
   OpenMM::LangevinIntegrator ligandProteinIntegrator(300, 5, 0.001);
   OpenMM::LocalEnergyMinimizer ligandProteinMinimizer;
-  OpenMM::Context ligandProteinContext(*bothOmmSys, ligandProteinIntegrator);
-  
+  OpenMM::Context ligandProteinContext(*bothOmmSys, ligandProteinIntegrator);  
   printf( "REMARK  Build ligandProteinContext Using OpenMM platform %s\n",
   	  ligandProteinContext.getPlatform().getName().c_str() );
   OpenMM::State ligandProteinState;
@@ -32,10 +48,36 @@ int main(int argc, char** argv)
 					    bothCoor[i*3+1]*OpenMM::NmPerAngstrom,
 					    bothCoor[i*3+2]*OpenMM::NmPerAngstrom);
   }
-  ligandProteinContext.setPositions(ligandProteinPosition);
-  
+  ligandProteinContext.setPositions(ligandProteinPosition);  
+  ligandProteinState = ligandProteinContext.getState(OpenMM::State::Energy, false, 1<<20);
+  std::cout << "vdw: "<< ligandProteinState.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
+  ligandProteinState = ligandProteinContext.getState(OpenMM::State::Energy, false, 1<<21);
+  std::cout << "elec: "<< ligandProteinState.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
   ligandProteinState = ligandProteinContext.getState(OpenMM::State::Energy);
-  std::cout << ligandProteinState.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
+  std::cout << "total: "<< ligandProteinState.getPotentialEnergy() * OpenMM::KcalPerKJ << std::endl;
+
+  OpenBabel::OBMol ligandNativeMini = ligandOBMol;
+  double rmsdNativeMini = CalcRMSD(ligandOBMol, ligandNativeMini);
+  std::cout << "rmsd: " << rmsdNativeMini << std::endl;
   
+  ligandProteinMinimizer.minimize(ligandProteinContext, 0.001, 1000);
+  double tmpCoor[ligandOBMol.NumAtoms()*3];
+  ligandProteinState = ligandProteinContext.getState(OpenMM::State::Positions);
+  // for(int i = 0; i < ligandOBMol.NumAtoms(); i++)
+  // {
+  //   tmpCoor[i*3 + 0] = ligandProteinPosition[i][0] * OpenMM::AngstromsPerNm;
+  //   tmpCoor[i*3 + 1] = ligandProteinPosition[i][1] * OpenMM::AngstromsPerNm;
+  //   tmpCoor[i*3 + 2] = ligandProteinPosition[i][2] * OpenMM::AngstromsPerNm;
+  // }
+  for(int i = 0; i < ligandOBMol.NumAtoms(); i++)
+  {
+    tmpCoor[i*3 + 0] = ligandProteinState.getPositions()[i][0] * OpenMM::AngstromsPerNm;
+    tmpCoor[i*3 + 1] = ligandProteinState.getPositions()[i][1] * OpenMM::AngstromsPerNm;
+    tmpCoor[i*3 + 2] = ligandProteinState.getPositions()[i][2] * OpenMM::AngstromsPerNm;
+  }      
+
+  ligandNativeMini.SetCoordinates(tmpCoor);
+  rmsdNativeMini = CalcRMSD(ligandOBMol, ligandNativeMini);
+  std::cout << "rmsd: " << rmsdNativeMini << std::endl;
   return 0;
 }
