@@ -78,11 +78,10 @@ void AddCustomNonbondedForceToOpenMMSystem(OpenMM::System *bothOmmSys)
   vdwForce->setForceGroup(20);
   vdwForce->createExclusionsFromBonds(bonds, 2);
   vdwForce->setNonbondedMethod(OpenMM::CustomNonbondedForce::CutoffNonPeriodic);
-  vdwForce->setCutoffDistance(1.4);
-  vdwForce->setUseSwitchingFunction(true);
-  vdwForce->setSwitchingDistance(1.2);
-  // vdwForce->setNonbondedMethod(OpenMM::CustomNonbondedForce::NoCutoff);
-  
+  vdwForce->setCutoffDistance(2);
+  // vdwForce->setUseSwitchingFunction(true);
+  // vdwForce->setSwitchingDistance(1.2);
+  // vdwForce->setNonbondedMethod(OpenMM::CustomNonbondedForce::NoCutoff);  
   bothOmmSys->addForce(vdwForce);
 
   // add CustomNonbondedForce for electrostatic
@@ -104,9 +103,9 @@ void AddCustomNonbondedForceToOpenMMSystem(OpenMM::System *bothOmmSys)
   elecForce->setForceGroup(21);
   elecForce->createExclusionsFromBonds(bonds, 2);
   elecForce->setNonbondedMethod(OpenMM::CustomNonbondedForce::CutoffNonPeriodic);
-  elecForce->setCutoffDistance(1.4);
-  elecForce->setUseSwitchingFunction(true);
-  elecForce->setSwitchingDistance(1.2);
+  elecForce->setCutoffDistance(2);
+  // elecForce->setUseSwitchingFunction(true);
+  // elecForce->setSwitchingDistance(1.2);
   // elecForce->setNonbondedMethod(OpenMM::CustomNonbondedForce::NoCutoff);
   bothOmmSys->addForce(elecForce);
   // remove default nonbonded force

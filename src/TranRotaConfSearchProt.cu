@@ -551,7 +551,7 @@ int main(int argc, char** argv)
 						  minEnergyCoorDouble[i*3+2]*OpenMM::NmPerAngstrom);
 	}
 	ligandProteinContext.setPositions(ligandProteinPosition);
-	ligandProteinMinimizer.minimize(ligandProteinContext, 0.01, 500);
+	ligandProteinMinimizer.minimize(ligandProteinContext, 0.01, 1000);
 	ligandProteinState = ligandProteinContext.getState(OpenMM::State::Energy|OpenMM::State::Positions);
 	for(int i = 0; i < ligandOmmSys->getNumParticles(); i++)
 	{
