@@ -38,7 +38,7 @@
 
 //// main function ////
 // Usage:
-// TranRotaConfSearch ligand.mol2 ligand.xml ligand-protein.xml ligand-protein.crd grid.txt maxNumOfConf numOfRotaPerConf maxNumOfRotaPerConf numOfRotaSample nLowest mode
+// TranRotaConfSearch ligand.mol2 ligand.xml ligand-protein.xml ligand-protein.crd grid.txt maxNumOfConf numOfRotaPerConf maxNumOfRotaPerConf numOfRotaSample nLowest mode finalSimulatedAnnealing
 // Arguments:
 // - ligand.mol2
 // - ligand.xml: serialized xml file for ligand
@@ -54,7 +54,9 @@
 //   - 1: only search translation and rotation. The conforamtion is given in mol2 file
 //   - 2: search translation, rotation, and conformation. The conformations are generated randomly. The final minimization step is done with presence of fixed protein
 //   - 3: search translation, rotation, and conformation. The conformations are generated greedy. The final minimization step is done with presence of fixed protein
-
+// - finalSimulatedAnnealing:
+//   - 0: don't do simulated annealing at the end
+//   - 1: do simulated annealing at the end before minimization
 int main(int argc, char** argv)
 {
   OpenMM::Platform::loadPluginsFromDirectory(
@@ -72,7 +74,8 @@ int main(int argc, char** argv)
   int numOfRotaSample = atoi(argv[9]);
   int nLowest = atoi(argv[10]);
   int mode = atoi(argv[11]);
-
+  int finalSA = atoi(argv[12]);
+    
   // read ligand molecule
   OpenBabel::OBMol ligandOBMol;
   OpenBabel::OBConversion conv(&std::cin, &std::cout);
@@ -318,11 +321,17 @@ int main(int argc, char** argv)
   conformerCoor = new float[nAtom*3];
   
   // ignore quaterions, whose end structures' dimenstion is larger than the grids
-  size_t maxNQuaternionsUsed = maxNumOfConformations * numOfRotaPerConformation / numOfConformations + 1;
-  if (maxNQuaternionsUsed > maxNumOfRotaPerConf)
+  // size_t maxNQuaternionsUsed = maxNumOfConformations * numOfRotaPerConformation / numOfConformations + 1;
+  size_t maxNQuaternionsUsed = numOfRotaPerConformation;
+  if (numOfConformations == 1)
   {
     maxNQuaternionsUsed = maxNumOfRotaPerConf;
   }
+  
+  // if (maxNQuaternionsUsed > maxNumOfRotaPerConf)
+  // {
+  //   maxNQuaternionsUsed = maxNumOfRotaPerConf;
+  // }
   
   size_t numOfQuaternionsUsed;
   float* quaternionsUsed = 0;  
@@ -554,6 +563,14 @@ int main(int argc, char** argv)
 						  minEnergyCoorDouble[i*3+2]*OpenMM::NmPerAngstrom);
 	}
 	ligandProteinContext.setPositions(ligandProteinPosition);
+	if (finalSA == 1)
+	{
+	  for (int T = 700; T >= 100; T = T - 100)
+	  {
+	    ligandProteinIntegrator.setTemperature(T);
+	    ligandProteinIntegrator.step(100);
+	  }
+	}
 	ligandProteinMinimizer.minimize(ligandProteinContext, 0.01, 1000);
 	ligandProteinState = ligandProteinContext.getState(OpenMM::State::Energy|OpenMM::State::Positions);
 	for(int i = 0; i < ligandOmmSys->getNumParticles(); i++)
