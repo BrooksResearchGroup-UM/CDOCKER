@@ -20,7 +20,7 @@
 #include "GetMaxCoors.h"
 #include "GetIdxOfAtomsForVdwRadius.h"
 #include "FillLigandGrid.h"
-#include "GeneConformations.h"
+#include "GeneDiverseConformations.h"
 #include "GeneRandomConformations.h"
 #include "kernel.h"
 #include "QuaternionUniformSampling.h"
@@ -52,8 +52,8 @@
 // - mode:
 //   - 0: only search translation
 //   - 1: only search translation and rotation. The conforamtion is given in mol2 file
-//   - 2: search translation, rotation, and conformation. The final minimization step is done with presence of fixed protein
-
+//   - 2: search translation, rotation, and conformation. The conformations are generated randomly. The final minimization step is done with presence of fixed protein
+//   - 3: search translation, rotation, and conformation. The conformations are generated greedy. The final minimization step is done with presence of fixed protein
 
 int main(int argc, char** argv)
 {
@@ -130,10 +130,13 @@ int main(int argc, char** argv)
     memcpy(coorsConformations, ligandOBMol.GetCoordinates(), sizeof(double) * nAtom * 3);
     numOfConformations = 1;
   }
-  if (mode == 2 || mode == 3)
+  if (mode == 2)
   {
-    //numOfConformations = GeneConformations(ligandOBMol, ligandOmmSys, maxNumOfConformations, coorsConformations);
     numOfConformations = GeneRandomConformations(ligandOBMol, ligandOmmSys, maxNumOfConformations, coorsConformations);
+  }
+  if (mode == 3)
+  {
+    numOfConformations = GeneDiverseConformations(ligandOBMol, ligandOmmSys, maxNumOfConformations, coorsConformations);
   }
   std::cout << "num of conformations: " << numOfConformations << std::endl;
   
@@ -372,7 +375,7 @@ int main(int argc, char** argv)
 	quaternions[i*4 + 3] = 0;
       }
     }
-    if (mode == 1 || mode == 2)
+    if (mode == 1 || mode == 2 || mode == 3)
     {
       QuaternionUniformSampling(gen, quaternions, numOfRotaSample);
     }
@@ -542,7 +545,7 @@ int main(int argc, char** argv)
 
       // final minimize
       // minimize with presence of fixed protein
-      if (mode == 2)
+      if (mode == 2 || mode == 3)
       {
 	for(int i = 0; i < ligandOmmSys->getNumParticles(); i++) // only update position of ligand
 	{
