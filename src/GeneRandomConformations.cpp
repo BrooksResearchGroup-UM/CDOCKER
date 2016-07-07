@@ -48,8 +48,9 @@ int GeneRandomConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxN
   
   // brief minimization and calculate energy for each conformation
   OpenMM::VerletIntegrator integrator(0.001);
+  OpenMM::LocalEnergyMinimizer minimizer;
   // OpenMM::Platform::loadPluginLibrary("/home/xqding/apps/openmmDev/lib/plugins/libOpenMMCPU.so");
-  OpenMM::Platform& platform = OpenMM::Platform::getPlatformByName("CPU");
+  OpenMM::Platform& platform = OpenMM::Platform::getPlatformByName("Reference");
   OpenMM::Context context(*sys, integrator, platform);
   printf( "REMARK  GeneConformation Using OpenMM platform %s\n",
 	  context.getPlatform().getName().c_str() );
@@ -65,6 +66,7 @@ int GeneRandomConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxN
 				 mols[k].GetCoordinates()[i*3+2]*OpenMM::NmPerAngstrom);
     }
     context.setPositions(position);
+    minimizer.minimize(context, 0.01, 100);
     state = context.getState(OpenMM::State::Positions | OpenMM::State::Energy);
     energy[k] = state.getPotentialEnergy()*OpenMM::KcalPerKJ;
     position = state.getPositions();

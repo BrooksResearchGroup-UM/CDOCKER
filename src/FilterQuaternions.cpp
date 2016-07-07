@@ -32,7 +32,7 @@ int FilterQuaternions(float* coor, int nAtom,
   GetMinCoors(nQuater, nAtom, coors_all_quaters, mincoors_all);
 
   // calculate maximum coor for each quaternions
-  GetMaxCoors(nQuater, nAtom, coors_all_quaters, mincoors_all);
+  GetMaxCoors(nQuater, nAtom, coors_all_quaters, maxcoors_all);
 
   // calculate the length for each quaternion
   for(int i = 0; i < nQuater; i++)
@@ -44,8 +44,13 @@ int FilterQuaternions(float* coor, int nAtom,
 
   // index of quaternions which keep the ligand dimenstion smaller than grids
   std::vector <int> idxOfQuatersUsed;
+  std::cout << "gridLen: " << gridLenX << "," << gridLenY << "," << gridLenZ << std::endl;
   for(int i = 0; i < nQuater; i++)
   {
+    std::cout << i << ":"
+	      << ligandLength_all[i*3 + 0] << ","
+      	      << ligandLength_all[i*3 + 1] << ","
+      	      << ligandLength_all[i*3 + 2] << std::endl;
     if(ligandLength_all[i*3 + 0] < gridLenX && ligandLength_all[i*3 + 1] < gridLenY && ligandLength_all[i*3 + 2] < gridLenZ)
     {
       idxOfQuatersUsed.push_back(i);

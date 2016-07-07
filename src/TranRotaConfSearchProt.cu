@@ -75,7 +75,15 @@ int main(int argc, char** argv)
   int nLowest = atoi(argv[10]);
   int mode = atoi(argv[11]);
   int finalSA = atoi(argv[12]);
-    
+
+  std::cout << "maxNumOfConformations: " << maxNumOfConformations << std::endl;
+  std::cout << "numOfRotaPerConformation: " << numOfRotaPerConformation << std::endl;
+  std::cout << "maxNumOfRotaPerConf: " << maxNumOfRotaPerConf << std::endl;
+  std::cout << "numOfRotaSample: " << numOfRotaSample << std::endl;
+  std::cout << "nLowest: " << nLowest << std::endl;
+  std::cout << "mode: " << mode << std::endl;
+  std::cout << "finalSA: " << finalSA << std::endl;
+  
   // read ligand molecule
   OpenBabel::OBMol ligandOBMol;
   OpenBabel::OBConversion conv(&std::cin, &std::cout);
@@ -185,25 +193,37 @@ int main(int argc, char** argv)
   AddCustomNonbondedForceToOpenMMSystem(bothOmmSys);
   // build OpenMM ligand protein context
   OpenMM::LangevinIntegrator ligandProteinIntegrator(300, 5, 0.001);
+  ligandProteinIntegrator.setRandomNumberSeed(123);
   OpenMM::LocalEnergyMinimizer ligandProteinMinimizer;
-  OpenMM::Context ligandProteinContext(*bothOmmSys, ligandProteinIntegrator);
+
+  OpenMM::Platform& platform = OpenMM::Platform::getPlatformByName("CUDA");
+  OpenMM::Context ligandProteinContext(*bothOmmSys, ligandProteinIntegrator, platform);
   printf( "REMARK  Build ligandProteinContext Using OpenMM platform %s\n",
 	  ligandProteinContext.getPlatform().getName().c_str() );
   OpenMM::State ligandProteinState;
   std::vector<OpenMM::Vec3> ligandProteinPosition(bothOmmSys->getNumParticles());
   for(int i = 0; i < bothOmmSys->getNumParticles(); i++)
   {
-    ligandProteinPosition[i] = OpenMM::Vec3(bothCoor[i*3+0]*OpenMM::NmPerAngstrom,
-					    bothCoor[i*3+1]*OpenMM::NmPerAngstrom,
-					    bothCoor[i*3+2]*OpenMM::NmPerAngstrom);
+    ligandProteinPosition[i] = OpenMM::Vec3( ((double) bothCoor[i*3+0])*OpenMM::NmPerAngstrom,
+					     ((double) bothCoor[i*3+1])*OpenMM::NmPerAngstrom,
+					     ((double) bothCoor[i*3+2])*OpenMM::NmPerAngstrom);
   }
   
   // briefly minimize the crystal structure pose of ligand and used as golden standard
   OpenBabel::OBMol ligandNativeMini = ligandOBMol;
+  OpenBabel::OBMol ligandNative = ligandOBMol;
+  double tmpCoor[ligandOBMol.NumAtoms()*3];
+  for(int i = 0; i < ligandOBMol.NumAtoms(); i++)
+  {
+    tmpCoor[i*3 + 0] = ligandProteinPosition[i][0] * OpenMM::AngstromsPerNm;
+    tmpCoor[i*3 + 1] = ligandProteinPosition[i][1] * OpenMM::AngstromsPerNm;
+    tmpCoor[i*3 + 2] = ligandProteinPosition[i][2] * OpenMM::AngstromsPerNm;
+  }      
+  ligandNative.SetCoordinates(tmpCoor);
+  
   ligandProteinContext.setPositions(ligandProteinPosition);
   ligandProteinMinimizer.minimize(ligandProteinContext, 0.001, 1500);
   ligandProteinState = ligandProteinContext.getState(OpenMM::State::Positions);
-  double tmpCoor[ligandOBMol.NumAtoms()*3];
   for(int i = 0; i < ligandOBMol.NumAtoms(); i++)
   {
     tmpCoor[i*3 + 0] = ligandProteinState.getPositions()[i][0] * OpenMM::AngstromsPerNm;
@@ -211,7 +231,7 @@ int main(int argc, char** argv)
     tmpCoor[i*3 + 2] = ligandProteinState.getPositions()[i][2] * OpenMM::AngstromsPerNm;
   }      
   ligandNativeMini.SetCoordinates(tmpCoor);
-  double rmsdNativeMini = CalcRMSD(ligandOBMol, ligandNativeMini);
+  double rmsdNativeMini = CalcRMSD(ligandNative, ligandNativeMini);
   
   //// cufft transform for grid potential //// 
   // batch cudaFFT for potential grids
@@ -533,11 +553,10 @@ int main(int argc, char** argv)
     // calculate the coordinates corresponding to lowest nLowest energy orientation
     std::vector<size_t> idxOfSortedQuater;
     idxOfSortedQuater = sort_index<float>(minEnergyQuaternionsUsed);
+    double minEnergyCoorDouble[nAtom*3];
     for(int iLowest = 0; iLowest < nLowest && iLowest < numOfQuaternionsUsed; iLowest++)
     {
-      int idxQ = idxOfSortedQuater[iLowest];
-      double minEnergyCoorDouble[nAtom*3];
-      
+      int idxQ = idxOfSortedQuater[iLowest];      
       // coordinate corresponding to the lowest energy pose in term of orientations
       for(int i = 0; i < nAtom; i++)
       {
@@ -551,7 +570,7 @@ int main(int argc, char** argv)
     	minEnergyCoorDouble[i*3 + 1] += (gridMinY - mincoorsUsed[idxQ*3 + 1] + minEnergyIdxY[idxQ] * spacing);
     	minEnergyCoorDouble[i*3 + 2] += (gridMinZ - mincoorsUsed[idxQ*3 + 2] + minEnergyIdxZ[idxQ] * spacing);
       }
-
+      
       // final minimize
       // minimize with presence of fixed protein
       if (mode == 2 || mode == 3)
@@ -563,12 +582,13 @@ int main(int argc, char** argv)
 						  minEnergyCoorDouble[i*3+2]*OpenMM::NmPerAngstrom);
 	}
 	ligandProteinContext.setPositions(ligandProteinPosition);
+	ligandProteinMinimizer.minimize(ligandProteinContext, 0.01, 300);
 	if (finalSA == 1)
 	{
-	  for (int T = 700; T >= 100; T = T - 100)
+	  for (int T = 700; T >= 50; T = T - 50)
 	  {
 	    ligandProteinIntegrator.setTemperature(T);
-	    ligandProteinIntegrator.step(100);
+	    ligandProteinIntegrator.step(200);
 	  }
 	}
 	ligandProteinMinimizer.minimize(ligandProteinContext, 0.01, 1000);
@@ -578,13 +598,13 @@ int main(int argc, char** argv)
 	  minEnergyCoorDouble[i*3 + 0] = ligandProteinState.getPositions()[i][0] * OpenMM::AngstromsPerNm;
 	  minEnergyCoorDouble[i*3 + 1] = ligandProteinState.getPositions()[i][1] * OpenMM::AngstromsPerNm;
 	  minEnergyCoorDouble[i*3 + 2] = ligandProteinState.getPositions()[i][2] * OpenMM::AngstromsPerNm;
-	}      
+	}
 	energyOfFinalPoses[idxOfConformer * nLowest + iLowest] = ligandProteinState.getPotentialEnergy() * OpenMM::KcalPerKJ;
       }
       
       // write nlowest energy pose out
       finalPoses[idxOfConformer * nLowest + iLowest].SetCoordinates(minEnergyCoorDouble);
-      double rmsd0 = CalcRMSD(finalPoses[idxOfConformer * nLowest + iLowest], ligandOBMol);
+      double rmsd0 = CalcRMSD(finalPoses[idxOfConformer * nLowest + iLowest], ligandNative);
       double rmsd1 = CalcRMSD(finalPoses[idxOfConformer * nLowest + iLowest], ligandNativeMini);
       
       std::string fileName;
@@ -597,6 +617,7 @@ int main(int argc, char** argv)
       energyFile << fileName << ","
       		 << idxOfConformer << ","
       		 << iLowest << ","
+		 << minEnergyQuaternionsUsed[idxQ] << ","
       		 << energyOfFinalPoses[idxOfConformer * nLowest + iLowest] << ","
 		 << rmsdNativeMini << ","
 		 << rmsd0 << ","
