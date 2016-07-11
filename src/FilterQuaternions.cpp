@@ -44,13 +44,8 @@ int FilterQuaternions(float* coor, int nAtom,
 
   // index of quaternions which keep the ligand dimenstion smaller than grids
   std::vector <int> idxOfQuatersUsed;
-  std::cout << "gridLen: " << gridLenX << "," << gridLenY << "," << gridLenZ << std::endl;
   for(int i = 0; i < nQuater; i++)
   {
-    std::cout << i << ":"
-	      << ligandLength_all[i*3 + 0] << ","
-      	      << ligandLength_all[i*3 + 1] << ","
-      	      << ligandLength_all[i*3 + 2] << std::endl;
     if(ligandLength_all[i*3 + 0] < gridLenX && ligandLength_all[i*3 + 1] < gridLenY && ligandLength_all[i*3 + 2] < gridLenZ)
     {
       idxOfQuatersUsed.push_back(i);

@@ -66,7 +66,7 @@ int GeneRandomConformations(OpenBabel::OBMol &mol, OpenMM::System *sys, int maxN
 				 mols[k].GetCoordinates()[i*3+2]*OpenMM::NmPerAngstrom);
     }
     context.setPositions(position);
-    minimizer.minimize(context, 0.01, 100);
+    minimizer.minimize(context, 0.001, 500);
     state = context.getState(OpenMM::State::Positions | OpenMM::State::Energy);
     energy[k] = state.getPotentialEnergy()*OpenMM::KcalPerKJ;
     position = state.getPositions();

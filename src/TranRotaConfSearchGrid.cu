@@ -50,6 +50,7 @@
 //   - 0: only search translation
 //   - 1: only search translation and rotation. The conforamtion is given in mol2 file
 //   - 2: search translation, rotation, and conformation. The final minimization step is done using grid.
+//   - 3: search translation, rotation, and conformation. No final minimization.
 
 int main(int argc, char** argv)
 {
@@ -109,9 +110,8 @@ int main(int argc, char** argv)
     memcpy(coorsConformations, ligandOBMol.GetCoordinates(), sizeof(double) * nAtom * 3);
     numOfConformations = 1;
   }
-  if (mode == 2)
+  if (mode == 2 || mode == 3)
   {
-    //numOfConformations = GeneConformations(ligandOBMol, ligandOmmSys, maxNumOfConformations, coorsConformations);
     numOfConformations = GeneRandomConformations(ligandOBMol, ligandOmmSys, maxNumOfConformations, coorsConformations);
   }
   std::cout << "num of conformations: " << numOfConformations << std::endl;
@@ -517,7 +517,10 @@ int main(int argc, char** argv)
 					       minEnergyCoorDouble[i*3+2]*OpenMM::NmPerAngstrom);
 	}      
 	ligandGridContext.setPositions(ligandGridPosition);
-	ligandGridMinimizer.minimize(ligandGridContext, 0.001, 1000);
+	if (mode == 2)
+	{
+	  ligandGridMinimizer.minimize(ligandGridContext, 0.001, 1000);
+	}
 	ligandGridState = ligandGridContext.getState(OpenMM::State::Energy);
 	for(int i = 0; i < ligandOmmSys->getNumParticles(); i++)
 	{
