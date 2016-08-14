@@ -20,7 +20,7 @@
 #include "GetMaxCoors.h"
 #include "GetIdxOfAtomsForVdwRadius.h"
 #include "FillLigandGrid.h"
-#include "GeneConformations.h"
+#include "GeneDiverseConformations.h"
 #include "GeneRandomConformations.h"
 #include "kernel.h"
 #include "QuaternionUniformSampling.h"
@@ -261,8 +261,9 @@ int main(int argc, char** argv)
   conformerCoor = new float[nAtom*3];
   
   // ignore quaterions, whose end structures' dimenstion is larger than the grids
-  size_t maxNQuaternionsUsed = maxNumOfConformations * numOfRotaPerConformation / numOfConformations + 1;
-  if (maxNQuaternionsUsed > maxNumOfRotaPerConf)
+  // size_t maxNQuaternionsUsed = maxNumOfConformations * numOfRotaPerConformation / numOfConformations + 1;
+  size_t maxNQuaternionsUsed = numOfRotaPerConformation;
+  if (numOfConformations == 1)
   {
     maxNQuaternionsUsed = maxNumOfRotaPerConf;
   }
@@ -497,6 +498,7 @@ int main(int argc, char** argv)
       energyFile << fileName << ","
       		 << idxOfConformer << ","
       		 << iLowest << ","
+		 << minEnergyQuaternionsUsed[idxQ]
       		 << std::endl;
       std::cout << "Conformer: " << idxOfConformer
       		<< ", IdxQ: " << idxQ
@@ -504,6 +506,7 @@ int main(int argc, char** argv)
       		<< ", IdxY: " << minEnergyIdxY[idxQ]
       		<< ", IdxZ: " << minEnergyIdxZ[idxQ]
       		<< ", MinEnergyTranRota:" << minEnergyQuaternionsUsed[idxQ]
+		<< std::endl;
     }
   }  
   energyFile.close();

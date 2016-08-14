@@ -12,7 +12,7 @@ BUILD = ./build
 SOURCE = ./src
 
 #programs = $(BUILD)/main $(BUILD)/cpuNaive $(BUILD)/TranRotaSearch $(BUILD)/TranRotaConfSearch $(BUILD)/test
-programs = $(BUILD)/TranRotaConfSearch $(BUILD)/TranRotaConfSearchGrid $(BUILD)/TranRotaConfSearchProt $(BUILD)/test 
+programs = $(BUILD)/TranRotaConfSearchNoMini $(BUILD)/TranRotaConfSearchGrid $(BUILD)/TranRotaConfSearchProt $(BUILD)/test 
 #programs = $(BUILD)/test
 objects = $(BUILD)/ReadCrd.o $(BUILD)/ReadGrids.o $(BUILD)/ReadQuaternions.o $(BUILD)/Rotate.o $(BUILD)/QuaternionMultiply.o $(BUILD)/FillLigandGrid.o $(BUILD)/GetMinCoors.o $(BUILD)/GetNonbondedParameters.o $(BUILD)/GetIdxOfAtomsForVdwRadius.o $(BUILD)/GeneDiverseConformations.o $(BUILD)/GetMaxCoors.o $(BUILD)/kernel.o $(BUILD)/QuaternionUniformSampling.o $(BUILD)/FilterQuaternions.o $(BUILD)/AddGridForcesToOpenMMSystem.o $(BUILD)/GeneRandomConformations.o $(BUILD)/AddCustomNonbondedForceToOpenMMSystem.o $(BUILD)/RemoveNonbondedForceBetweenMasslessParticles.o $(BUILD)/CalcRMSD.o
 

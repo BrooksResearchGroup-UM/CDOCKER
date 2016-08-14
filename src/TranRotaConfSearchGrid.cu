@@ -20,7 +20,7 @@
 #include "GetMaxCoors.h"
 #include "GetIdxOfAtomsForVdwRadius.h"
 #include "FillLigandGrid.h"
-#include "GeneConformations.h"
+#include "GeneDiverseConformations.h"
 #include "GeneRandomConformations.h"
 #include "kernel.h"
 #include "QuaternionUniformSampling.h"
